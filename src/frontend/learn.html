@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learn - Stock Analyzer</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand" onclick="window.location.href='index.html'">
+            <span class="nav-icon">📊</span>
+            <span class="nav-title">Stock Analyzer</span>
+        </div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Home</a>
+            <a href="learn.html" class="nav-link active">Learn</a>
+        </div>
+    </nav>
+
+    <main class="learn-container">
+        <div class="learn-hero">
+            <h1>Stock Market Glossary</h1>
+            <p>Everything you need to know about stock statistics, explained in plain English.</p>
+            <div class="learn-search-wrapper">
+                <input type="text" id="glossarySearch" class="glossary-search"
+                       placeholder="Search terms..." autocomplete="off">
+            </div>
+        </div>
+
+        <div class="category-filters" id="categoryFilters">
+            <button class="cat-btn active" data-category="all">All</button>
+        </div>
+
+        <div id="glossaryContent" class="glossary-grid">
+            <div class="spinner"></div>
+            <p class="muted">Loading glossary...</p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>For educational and informational purposes only. Not financial advice.</p>
+    </footer>
+
+    <script src="js/learn.js"></script>
+</body>
+</html>

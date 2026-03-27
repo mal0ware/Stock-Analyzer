@@ -1,5 +1,6 @@
-# Prerequisites
-*.d
+# Build output
+build/
+cmake-build-*/
 
 # Compiled Object files
 *.slo
@@ -22,10 +23,6 @@
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
@@ -37,5 +34,28 @@
 *.out
 *.app
 
-# debug information files
+# Debug information
 *.dwo
+
+# Java class files
+*.class
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
