@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analyzer</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand" onclick="window.location.href='index.html'">
+            <span class="nav-icon">📊</span>
+            <span class="nav-title">Stock Analyzer</span>
+        </div>
+        <div class="nav-search-mini">
+            <input type="text" id="searchInput" class="search-input-mini"
+                   placeholder="Search ticker..." autocomplete="off" spellcheck="false">
+            <div id="searchResults" class="search-results hidden"></div>
+        </div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">Home</a>
+            <a href="learn.html" class="nav-link">Learn</a>
+        </div>
+    </nav>
+
+    <main class="stock-container">
+        <!-- Loading state -->
+        <div id="loadingState" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading stock data...</p>
+        </div>
+
+        <!-- Error state -->
+        <div id="errorState" class="error-state hidden">
+            <h2>Stock Not Found</h2>
+            <p id="errorMessage">Could not find data for this ticker.</p>
+            <a href="index.html" class="btn btn-primary">Back to Search</a>
+        </div>
+
+        <!-- Stock content -->
+        <div id="stockContent" class="hidden">
+            <!-- Header -->
+            <div class="stock-header">
+                <div class="stock-header-left">
+                    <h1 class="stock-name" id="stockName">-</h1>
+                    <span class="stock-symbol" id="stockSymbol">-</span>
+                    <span class="stock-meta" id="stockMeta"></span>
+                </div>
+                <div class="stock-header-right">
+                    <div class="stock-price" id="stockPrice">-</div>
+                    <div class="stock-change" id="stockChange">-</div>
+                </div>
+            </div>
+
+            <!-- Chart section -->
+            <div class="card chart-card">
+                <div class="chart-controls">
+                    <button class="period-btn" data-period="1d">1D</button>
+                    <button class="period-btn" data-period="5d">5D</button>
+                    <button class="period-btn active" data-period="1mo">1M</button>
+                    <button class="period-btn" data-period="6mo">6M</button>
+                    <button class="period-btn" data-period="1y">1Y</button>
+                    <button class="period-btn" data-period="5y">5Y</button>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="chart-wrapper volume-chart-wrapper">
+                    <canvas id="volumeChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Stats grid -->
+            <div class="section-title">Key Statistics</div>
+            <div class="stats-grid" id="statsGrid">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Technical analysis -->
+            <div class="section-title">Technical Indicators</div>
+            <div class="card" id="technicalCard">
+                <div class="technical-grid" id="technicalGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Interpretation -->
+            <div class="section-title">Analysis</div>
+            <div class="card" id="interpretCard">
+                <div id="interpretContent" class="interpret-content">
+                    <div class="spinner-small"></div>
+                    <p class="muted">Generating analysis...</p>
+                </div>
+            </div>
+
+            <!-- News -->
+            <div class="section-title">Recent News</div>
+            <div class="card" id="newsCard">
+                <div id="newsContent" class="news-content">
+                    <div class="spinner-small"></div>
+                    <p class="muted">Loading news...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>For educational and informational purposes only. Not financial advice.</p>
+    </footer>
+
+    <script src="js/search.js"></script>
+    <script src="js/chart_render.js"></script>
+    <script src="js/stock.js"></script>
+</body>
+</html>
