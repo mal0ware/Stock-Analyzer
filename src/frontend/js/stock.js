@@ -510,8 +510,11 @@
             if (!list || !loading) return;
             if (data.articles && data.articles.length > 0) {
                 list.innerHTML = data.articles.map(function(a) {
-                    var thumb = a.thumbnail ? '<img class="news-thumb" src="' + esc(a.thumbnail) + '" alt="">' : '';
-                    return '<a class="news-item" href="' + esc(a.link) + '" target="_blank" rel="noopener">' +
+                    // Only allow https URLs for thumbnails and links (prevent javascript: XSS)
+                    var safeThumb = (a.thumbnail && /^https:\/\//.test(a.thumbnail)) ? a.thumbnail : '';
+                    var safeLink = (a.link && /^https?:\/\//.test(a.link)) ? a.link : '#';
+                    var thumb = safeThumb ? '<img class="news-thumb" src="' + esc(safeThumb) + '" alt="">' : '';
+                    return '<a class="news-item" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer">' +
                         thumb +
                         '<div class="news-info">' +
                         '<div class="news-title">' + esc(a.title) + '</div>' +

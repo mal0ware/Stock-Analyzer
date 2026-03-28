@@ -7,8 +7,29 @@ Outputs JSON to stdout.
 
 import sys
 import json
+import re
 import yfinance as yf
 from datetime import datetime, timedelta
+
+# Input validation (defense-in-depth alongside C++ validation)
+VALID_SYMBOL = re.compile(r'^[A-Za-z0-9.\-]{1,10}$')
+VALID_PERIODS = {'1d', '5d', '1mo', '6mo', '1y', '5y'}
+MAX_QUERY_LENGTH = 100
+
+
+def validate_symbol(s: str) -> str:
+    """Validate and normalize a ticker symbol."""
+    s = s.strip().upper()
+    if not VALID_SYMBOL.match(s):
+        raise ValueError(f"Invalid ticker symbol: {s!r}")
+    return s
+
+
+def validate_period(s: str) -> str:
+    """Validate a period parameter against allowed values."""
+    if s not in VALID_PERIODS:
+        raise ValueError(f"Invalid period: {s!r}")
+    return s
 
 
 def fetch_quote(ticker_symbol: str) -> dict:
@@ -143,6 +164,10 @@ def search_ticker(query: str) -> dict:
         import urllib.request
         import urllib.parse
 
+        # Validate query length
+        if len(query) > MAX_QUERY_LENGTH:
+            return {"results": [], "error": "Query too long"}
+
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={urllib.parse.quote(query)}&quotesCount=6&newsCount=0"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -172,15 +197,18 @@ def main():
     command = sys.argv[1]
     arg = sys.argv[2]
 
-    if command == "quote":
-        result = fetch_quote(arg)
-    elif command == "history":
-        period = sys.argv[3] if len(sys.argv) > 3 else "1mo"
-        result = fetch_history(arg, period)
-    elif command == "search":
-        result = search_ticker(arg)
-    else:
-        result = {"error": f"Unknown command: {command}"}
+    try:
+        if command == "quote":
+            result = fetch_quote(validate_symbol(arg))
+        elif command == "history":
+            period = validate_period(sys.argv[3] if len(sys.argv) > 3 else "1mo")
+            result = fetch_history(validate_symbol(arg), period)
+        elif command == "search":
+            result = search_ticker(arg)
+        else:
+            result = {"error": f"Unknown command: {command!r}"}
+    except ValueError as e:
+        result = {"error": str(e)}
 
     print(json.dumps(result))
 
