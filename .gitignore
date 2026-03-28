@@ -40,6 +40,10 @@ cmake-build-*/
 # Java class files
 *.class
 
+# Node / Electron
+node_modules/
+package-lock.json
+
 # Python
 __pycache__/
 *.pyc

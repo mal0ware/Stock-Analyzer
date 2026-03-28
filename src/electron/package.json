@@ -1,0 +1,13 @@
+{
+  "name": "stock-analyzer",
+  "version": "1.0.0",
+  "description": "Stock Analyzer — Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.1.0",
+    "electron": "^35.0.0"
+  }
+}
