@@ -22,6 +22,7 @@ $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 
 copy-assets:
+	@rm -rf $(BUILDDIR)/frontend $(BUILDDIR)/python
 	@cp -r src/frontend $(BUILDDIR)/frontend 2>/dev/null || true
 	@cp -r src/python $(BUILDDIR)/python 2>/dev/null || true
 	@mkdir -p $(BUILDDIR)/java 2>/dev/null || true

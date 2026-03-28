@@ -211,16 +211,85 @@ echo ""
 
 # 5. Create a launch script inside the dist
 DIST_DIR="$PROJECT_DIR/dist/StockAnalyzer-linux-x64"
-cat > "$DIST_DIR/StockAnalyzer" << 'LAUNCHEOF'
+cat > "$DIST_DIR/launch.sh" << 'LAUNCHEOF'
 #!/bin/bash
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-unset ELECTRON_RUN_AS_NODE
-export PATH="$HOME/.local/jdk/bin:$HOME/.local/bin:$PATH"
-exec "$DIR/StockAnalyzer" --no-sandbox "$@"
-LAUNCHEOF
+# Stock Analyzer — Packaged App Launcher
+# On WSL2: starts backend in WSL, opens a native Windows app window
+# On Linux: launches via Electron
 
-# Actually the binary is already named StockAnalyzer, so rename the launcher
-mv "$DIST_DIR/StockAnalyzer" "$DIST_DIR/launch.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND="$DIR/resources/app/backend/stock_analyzer"
+
+export PATH="$HOME/.local/jdk/bin:$HOME/.local/bin:$PATH"
+unset ELECTRON_RUN_AS_NODE
+
+# ---- Detect WSL ----
+IS_WSL=false
+if grep -qi "microsoft" /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+# ---- Helper: launch a Windows browser window in app mode ----
+launch_windows_window() {
+    local url="$1"
+    local EDGE1="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+    local EDGE2="/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe"
+    local CHROME1="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+    local CHROME2="/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+
+    for browser in "$EDGE1" "$EDGE2" "$CHROME1" "$CHROME2"; do
+        if [ -f "$browser" ]; then
+            "$browser" "--app=$url" "--window-size=1320,880" &>/dev/null &
+            return 0
+        fi
+    done
+
+    if command -v powershell.exe &>/dev/null; then
+        powershell.exe -Command "Start-Process 'msedge' '--app=$url --window-size=1320,880'" &>/dev/null
+        return 0
+    fi
+
+    cmd.exe /c start "$url" &>/dev/null
+    echo "Note: opened in browser tab. For a standalone window, install Microsoft Edge."
+}
+
+# ---- WSL mode ----
+if $IS_WSL; then
+    echo "WSL detected — launching Stock Analyzer as a Windows application."
+    echo ""
+
+    "$BACKEND" --headless &
+    BACKEND_PID=$!
+
+    echo "Starting backend..."
+    for i in $(seq 1 40); do
+        if (echo > /dev/tcp/localhost/8089) 2>/dev/null; then
+            echo "Backend ready."
+            break
+        fi
+        if ! kill -0 $BACKEND_PID 2>/dev/null; then
+            echo "Backend crashed on startup."
+            exit 1
+        fi
+        sleep 0.25
+    done
+
+    echo "Opening application window..."
+    launch_windows_window "http://localhost:8089"
+
+    echo ""
+    echo "Stock Analyzer is running at http://localhost:8089"
+    echo "Press Ctrl+C to stop."
+    echo ""
+
+    trap "echo ''; echo 'Shutting down...'; kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
+    wait $BACKEND_PID
+    exit 0
+fi
+
+# ---- Native Linux mode: use Electron ----
+exec "$DIR/StockAnalyzer" --no-sandbox --ozone-platform=x11 --disable-gpu "$@"
+LAUNCHEOF
 chmod +x "$DIST_DIR/launch.sh"
 
 # Create .desktop file

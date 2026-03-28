@@ -1,61 +1,93 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Analyzer</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css?v=2">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
+
+    <!-- Navigation -->
     <nav class="navbar">
-        <div class="nav-brand" onclick="window.location.href='index.html'">
-            <span class="nav-icon">📊</span>
+        <a href="index.html" class="nav-brand">
+            <span class="nav-icon">&#x1F4CA;</span>
             <span class="nav-title">Stock Analyzer</span>
-        </div>
+        </a>
+
         <div class="nav-search-mini">
-            <input type="text" id="searchInput" class="search-input-mini"
-                   placeholder="Search ticker..." autocomplete="off" spellcheck="false">
-            <div id="searchResults" class="search-results hidden"></div>
+            <input type="text" class="search-input-mini" id="navSearchInput" placeholder="Search ticker or company..." autocomplete="off">
+            <div class="search-results" id="navSearchResults"></div>
         </div>
-        <div class="nav-links">
-            <a href="index.html" class="nav-link">Home</a>
-            <a href="learn.html" class="nav-link">Learn</a>
+
+        <div class="nav-right">
+            <nav class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="learn.html" class="nav-link">Learn</a>
+            </nav>
+            <div class="theme-picker">
+                <button class="theme-btn" id="themeToggle" title="Change theme">&#x1F3A8;</button>
+                <div class="theme-dropdown" id="themeDropdown">
+                    <button class="theme-option active" data-theme="dark">
+                        <span class="theme-swatch" style="background:#0f1117"></span> Dark
+                    </button>
+                    <button class="theme-option" data-theme="light">
+                        <span class="theme-swatch" style="background:#f5f6fa"></span> Light
+                    </button>
+                    <button class="theme-option" data-theme="midnight">
+                        <span class="theme-swatch" style="background:#000000"></span> Midnight
+                    </button>
+                    <button class="theme-option" data-theme="ocean">
+                        <span class="theme-swatch" style="background:#0b1628"></span> Ocean
+                    </button>
+                    <button class="theme-option" data-theme="terminal">
+                        <span class="theme-swatch" style="background:#0a0e0a"></span> Terminal
+                    </button>
+                </div>
+            </div>
         </div>
     </nav>
 
     <main class="stock-container">
-        <!-- Loading state -->
-        <div id="loadingState" class="loading-state">
+
+        <!-- Loading State -->
+        <div class="loading-state" id="loadingState">
             <div class="spinner"></div>
-            <p>Loading stock data...</p>
+            <span class="muted">Loading stock data...</span>
         </div>
 
-        <!-- Error state -->
-        <div id="errorState" class="error-state hidden">
+        <!-- Error State -->
+        <div class="error-state hidden" id="errorState">
             <h2>Stock Not Found</h2>
-            <p id="errorMessage">Could not find data for this ticker.</p>
-            <a href="index.html" class="btn btn-primary">Back to Search</a>
+            <p id="errorMessage">We couldn't find data for this symbol.</p>
+            <button class="back-btn" onclick="window.location='index.html'">Back to Search</button>
         </div>
 
-        <!-- Stock content -->
-        <div id="stockContent" class="hidden">
-            <!-- Header -->
+        <!-- Stock Content (hidden until loaded) -->
+        <div class="hidden" id="stockContent">
+
+            <!-- Header: Name, Price, Change -->
             <div class="stock-header">
                 <div class="stock-header-left">
-                    <h1 class="stock-name" id="stockName">-</h1>
-                    <span class="stock-symbol" id="stockSymbol">-</span>
-                    <span class="stock-meta" id="stockMeta"></span>
+                    <h1 class="stock-name" id="stockName"></h1>
+                    <div class="stock-meta">
+                        <span class="stock-symbol" id="stockSymbol"></span>
+                        <span class="stock-meta-text" id="stockMeta"></span>
+                    </div>
                 </div>
                 <div class="stock-header-right">
-                    <div class="stock-price" id="stockPrice">-</div>
-                    <div class="stock-change" id="stockChange">-</div>
+                    <div class="stock-price" id="stockPrice"></div>
+                    <div class="stock-change" id="stockChange"></div>
                 </div>
             </div>
 
-            <!-- Chart section -->
-            <div class="card chart-card">
-                <div class="chart-controls">
+            <!-- Company Description -->
+            <div class="company-description" id="companyDescription"></div>
+
+            <!-- Chart -->
+            <div class="chart-section">
+                <div class="chart-controls" id="chartControls">
                     <button class="period-btn" data-period="1d">1D</button>
                     <button class="period-btn" data-period="5d">5D</button>
                     <button class="period-btn active" data-period="1mo">1M</button>
@@ -66,51 +98,72 @@
                 <div class="chart-wrapper">
                     <canvas id="priceChart"></canvas>
                 </div>
-                <div class="chart-wrapper volume-chart-wrapper">
+                <div class="volume-chart-wrapper">
                     <canvas id="volumeChart"></canvas>
                 </div>
             </div>
 
-            <!-- Stats grid -->
-            <div class="section-title">Key Statistics</div>
-            <div class="stats-grid" id="statsGrid">
-                <!-- Populated by JS -->
-            </div>
-
-            <!-- Technical analysis -->
-            <div class="section-title">Technical Indicators</div>
-            <div class="card" id="technicalCard">
-                <div class="technical-grid" id="technicalGrid">
-                    <!-- Populated by JS -->
+            <!-- Analyst Rating + Technical Rating -->
+            <div class="ratings-row">
+                <div class="rating-panel" id="analystPanel">
+                    <div class="rating-panel-title">Analyst Rating</div>
+                    <div class="loading-placeholder" id="analystLoading">
+                        <span class="inline-spinner"></span> Loading...
+                    </div>
+                    <div class="hidden" id="analystContent"></div>
+                </div>
+                <div class="rating-panel" id="technicalPanel">
+                    <div class="rating-panel-title">Technical Rating</div>
+                    <div class="loading-placeholder" id="technicalLoading">
+                        <span class="inline-spinner"></span> Loading...
+                    </div>
+                    <div class="hidden" id="technicalContent"></div>
                 </div>
             </div>
 
-            <!-- Interpretation -->
-            <div class="section-title">Analysis</div>
-            <div class="card" id="interpretCard">
-                <div id="interpretContent" class="interpret-content">
-                    <div class="spinner-small"></div>
-                    <p class="muted">Generating analysis...</p>
+            <!-- AI Overview / Strategy -->
+            <div class="overview-section" id="overviewSection">
+                <div class="section-divider">AI Stock Overview</div>
+                <div class="loading-placeholder" id="overviewLoading">
+                    <span class="inline-spinner"></span> Generating analysis...
                 </div>
+                <div class="hidden" id="overviewContent"></div>
+            </div>
+
+            <!-- Key Statistics -->
+            <div class="stats-section">
+                <div class="section-divider">Key Statistics</div>
+                <div class="stats-grid" id="statsGrid"></div>
+            </div>
+
+            <!-- Insights from Java Interpreter -->
+            <div class="insights-section">
+                <div class="section-divider">Analysis</div>
+                <div class="loading-placeholder" id="insightsLoading">
+                    <span class="inline-spinner"></span> Loading...
+                </div>
+                <div class="insight-list hidden" id="insightList"></div>
             </div>
 
             <!-- News -->
-            <div class="section-title">Recent News</div>
-            <div class="card" id="newsCard">
-                <div id="newsContent" class="news-content">
-                    <div class="spinner-small"></div>
-                    <p class="muted">Loading news...</p>
+            <div class="news-section">
+                <div class="section-divider">Recent News</div>
+                <div class="loading-placeholder" id="newsLoading">
+                    <span class="inline-spinner"></span> Loading...
                 </div>
+                <div class="news-list hidden" id="newsList"></div>
             </div>
+
         </div>
     </main>
 
     <footer class="footer">
-        <p>For educational and informational purposes only. Not financial advice.</p>
+        For educational and informational purposes only. Not financial advice.
     </footer>
 
-    <script src="js/search.js"></script>
-    <script src="js/chart_render.js"></script>
-    <script src="js/stock.js"></script>
+    <script src="js/theme.js?v=2"></script>
+    <script src="js/search.js?v=2"></script>
+    <script src="js/chart_render.js?v=2"></script>
+    <script src="js/stock.js?v=2"></script>
 </body>
 </html>

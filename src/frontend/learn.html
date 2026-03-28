@@ -1,27 +1,55 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Learn - Stock Analyzer</title>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=2">
 </head>
 <body>
     <nav class="navbar">
-        <div class="nav-brand" onclick="window.location.href='index.html'">
-            <span class="nav-icon">📊</span>
+        <a href="index.html" class="nav-brand">
+            <span class="nav-icon">&#x1F4CA;</span>
             <span class="nav-title">Stock Analyzer</span>
+        </a>
+
+        <div class="nav-search-mini">
+            <input type="text" class="search-input-mini" id="navSearchInput" placeholder="Search ticker or company..." autocomplete="off">
+            <div class="search-results" id="navSearchResults"></div>
         </div>
-        <div class="nav-links">
-            <a href="index.html" class="nav-link">Home</a>
-            <a href="learn.html" class="nav-link active">Learn</a>
+
+        <div class="nav-right">
+            <nav class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="learn.html" class="nav-link active">Learn</a>
+            </nav>
+            <div class="theme-picker">
+                <button class="theme-btn" id="themeToggle" title="Change theme">&#x1F3A8;</button>
+                <div class="theme-dropdown" id="themeDropdown">
+                    <button class="theme-option active" data-theme="dark">
+                        <span class="theme-swatch" style="background:#0f1117"></span> Dark
+                    </button>
+                    <button class="theme-option" data-theme="light">
+                        <span class="theme-swatch" style="background:#f5f6fa"></span> Light
+                    </button>
+                    <button class="theme-option" data-theme="midnight">
+                        <span class="theme-swatch" style="background:#000000"></span> Midnight
+                    </button>
+                    <button class="theme-option" data-theme="ocean">
+                        <span class="theme-swatch" style="background:#0b1628"></span> Ocean
+                    </button>
+                    <button class="theme-option" data-theme="terminal">
+                        <span class="theme-swatch" style="background:#0a0e0a"></span> Terminal
+                    </button>
+                </div>
+            </div>
         </div>
     </nav>
 
     <main class="learn-container">
         <div class="learn-hero">
             <h1>Stock Market Glossary</h1>
-            <p>Everything you need to know about stock statistics, explained in plain English.</p>
+            <p class="subtitle">Everything you need to know about stock statistics, explained in plain English.</p>
             <div class="learn-search-wrapper">
                 <input type="text" id="glossarySearch" class="glossary-search"
                        placeholder="Search terms..." autocomplete="off">
@@ -33,15 +61,18 @@
         </div>
 
         <div id="glossaryContent" class="glossary-grid">
-            <div class="spinner"></div>
-            <p class="muted">Loading glossary...</p>
+            <div class="loading-placeholder">
+                <span class="inline-spinner"></span> Loading glossary...
+            </div>
         </div>
     </main>
 
     <footer class="footer">
-        <p>For educational and informational purposes only. Not financial advice.</p>
+        For educational and informational purposes only. Not financial advice.
     </footer>
 
-    <script src="js/learn.js"></script>
+    <script src="js/theme.js?v=2"></script>
+    <script src="js/search.js?v=2"></script>
+    <script src="js/learn.js?v=2"></script>
 </body>
 </html>
