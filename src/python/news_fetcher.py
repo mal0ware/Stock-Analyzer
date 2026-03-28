@@ -7,7 +7,18 @@ Outputs JSON to stdout.
 
 import sys
 import json
+import re
 import yfinance as yf
+
+VALID_SYMBOL = re.compile(r'^[A-Za-z0-9.\-]{1,10}$')
+
+
+def validate_symbol(s: str) -> str:
+    """Validate and normalize a ticker symbol."""
+    s = s.strip().upper()
+    if not VALID_SYMBOL.match(s):
+        raise ValueError(f"Invalid ticker symbol: {s!r}")
+    return s
 
 
 def fetch_news(ticker_symbol: str) -> dict:
@@ -49,7 +60,11 @@ def main():
         print(json.dumps({"error": "Usage: news_fetcher.py <ticker>"}))
         sys.exit(1)
 
-    ticker_symbol = sys.argv[1]
+    try:
+        ticker_symbol = validate_symbol(sys.argv[1])
+    except ValueError as e:
+        print(json.dumps({"articles": [], "error": str(e)}))
+        sys.exit(1)
     result = fetch_news(ticker_symbol)
     print(json.dumps(result))
 
