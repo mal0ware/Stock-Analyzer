@@ -49,6 +49,26 @@ def fetch_quote(ticker_symbol: str) -> dict:
             "industry": info.get("industry"),
             "exchange": info.get("exchange"),
             "currency": info.get("currency", "USD"),
+            # Company profile
+            "description": info.get("longBusinessSummary", ""),
+            "website": info.get("website", ""),
+            "fullTimeEmployees": info.get("fullTimeEmployees"),
+            # Analyst data
+            "recommendationKey": info.get("recommendationKey", ""),
+            "recommendationMean": info.get("recommendationMean"),
+            "targetHighPrice": info.get("targetHighPrice"),
+            "targetLowPrice": info.get("targetLowPrice"),
+            "targetMeanPrice": info.get("targetMeanPrice"),
+            "targetMedianPrice": info.get("targetMedianPrice"),
+            "numberOfAnalystOpinions": info.get("numberOfAnalystOpinions"),
+            # Growth metrics
+            "revenueGrowth": info.get("revenueGrowth"),
+            "earningsGrowth": info.get("earningsGrowth"),
+            "grossMargins": info.get("grossMargins"),
+            "operatingMargins": info.get("operatingMargins"),
+            "totalRevenue": info.get("totalRevenue"),
+            "totalDebt": info.get("totalDebt"),
+            "freeCashflow": info.get("freeCashflow"),
         }
 
         # Calculate change and percent change
