@@ -112,8 +112,18 @@ if $IS_WSL; then
     exit 0
 fi
 
-# ---- Native Linux mode: use Electron ----
+# ---- Native desktop mode (Linux / macOS): use Electron ----
+ELECTRON_BIN=""
 if [ -f "$PROJECT_DIR/src/electron/node_modules/electron/dist/electron" ]; then
+    ELECTRON_BIN="$PROJECT_DIR/src/electron/node_modules/electron/dist/electron"
+elif [ -f "$PROJECT_DIR/src/electron/node_modules/.bin/electron" ]; then
+    ELECTRON_BIN="$PROJECT_DIR/src/electron/node_modules/.bin/electron"
+elif [ -d "$PROJECT_DIR/src/electron/node_modules/electron/dist/Electron.app" ]; then
+    # macOS Electron path
+    ELECTRON_BIN="$PROJECT_DIR/src/electron/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+fi
+
+if [ -n "$ELECTRON_BIN" ]; then
     echo "Starting Stock Analyzer..."
     cd "$PROJECT_DIR/src/electron"
     exec npx electron . --no-sandbox 2>/dev/null
@@ -123,11 +133,31 @@ else
         cd "$PROJECT_DIR/src/electron"
         npm install --silent 2>/dev/null
         echo "Starting Stock Analyzer..."
-        exec npx electron . 2>/dev/null
+        exec npx electron . --no-sandbox 2>/dev/null
     else
-        echo "Node.js not found. Running in headless mode."
-        echo "Install Node.js for the desktop window, or open http://localhost:8089"
+        # Fallback: headless mode with system browser
+        echo "Electron not available. Starting in browser mode..."
         cd "$PROJECT_DIR/build"
-        exec ./stock_analyzer --headless
+        ./stock_analyzer --headless &
+        BACKEND_PID=$!
+
+        for i in $(seq 1 40); do
+            if (echo > /dev/tcp/localhost/8089) 2>/dev/null; then
+                break
+            fi
+            sleep 0.25
+        done
+
+        # Open in default browser
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            open "http://localhost:8089"
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open "http://localhost:8089"
+        fi
+
+        echo "Stock Analyzer is running at http://localhost:8089"
+        echo "Press Ctrl+C to stop."
+        trap "kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
+        wait $BACKEND_PID
     fi
 fi
