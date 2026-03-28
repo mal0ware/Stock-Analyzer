@@ -126,9 +126,16 @@ static void setupRoutes() {
     // Security headers (OWASP A05:2021)
     // Applied to every response from the server.
     // ============================================================
-    svr.set_post_routing_handler([](const httplib::Request&, httplib::Response& res) {
-        // CORS — localhost only (this is a local desktop app)
-        res.set_header("Access-Control-Allow-Origin", "http://localhost:8089");
+    svr.set_post_routing_handler([](const httplib::Request& req, httplib::Response& res) {
+        // CORS — allow both localhost and 127.0.0.1 since this is a local-only app.
+        // Electron uses 127.0.0.1, WSL Edge uses localhost — both must work.
+        std::string origin = req.get_header_value("Origin");
+        if (origin == "http://localhost:8089" || origin == "http://127.0.0.1:8089") {
+            res.set_header("Access-Control-Allow-Origin", origin);
+        } else {
+            // For same-origin requests (no Origin header), allow localhost
+            res.set_header("Access-Control-Allow-Origin", "http://localhost:8089");
+        }
         res.set_header("Access-Control-Allow-Methods", "GET, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type");
 
@@ -144,13 +151,14 @@ static void setupRoutes() {
         // Don't leak referrer URLs to external sites
         res.set_header("Referrer-Policy", "strict-origin-when-cross-origin");
 
-        // Content Security Policy — whitelist trusted sources only
+        // Content Security Policy — whitelist trusted sources only.
+        // Allow connections to both localhost and 127.0.0.1 for cross-platform compat.
         res.set_header("Content-Security-Policy",
             "default-src 'self'; "
             "script-src 'self' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' https: data:; "
-            "connect-src 'self'; "
+            "connect-src 'self' http://localhost:8089 http://127.0.0.1:8089; "
             "font-src 'self'; "
             "frame-ancestors 'none';"
         );
