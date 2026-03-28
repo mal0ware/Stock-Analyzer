@@ -44,22 +44,49 @@
         }
     }
 
+    // Escape HTML to prevent XSS from API responses (OWASP A07:2021)
+    function esc(s) {
+        if (!s) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
     async function performSearch(query, resultsEl, autoNavigate) {
         try {
             const resp = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
             const data = await resp.json();
             if (data.results && data.results.length > 0) {
                 if (autoNavigate && data.results.length === 1) {
-                    window.location.href = `stock.html?s=${data.results[0].symbol}`;
+                    window.location.href = `stock.html?s=${encodeURIComponent(data.results[0].symbol)}`;
                     return;
                 }
-                resultsEl.innerHTML = data.results.map(r => `
-                    <div class="search-result-item" onclick="window.location.href='stock.html?s=${r.symbol}'">
-                        <span class="search-result-symbol">${r.symbol}</span>
-                        <span class="search-result-name">${r.name}</span>
-                        <span class="search-result-exchange">${r.exchange || ''}</span>
-                    </div>
-                `).join('');
+                // Build results using DOM methods to prevent XSS
+                resultsEl.innerHTML = '';
+                data.results.forEach(r => {
+                    var item = document.createElement('div');
+                    item.className = 'search-result-item';
+                    item.addEventListener('click', function() {
+                        window.location.href = 'stock.html?s=' + encodeURIComponent(r.symbol);
+                    });
+
+                    var symSpan = document.createElement('span');
+                    symSpan.className = 'search-result-symbol';
+                    symSpan.textContent = r.symbol;
+
+                    var nameSpan = document.createElement('span');
+                    nameSpan.className = 'search-result-name';
+                    nameSpan.textContent = r.name;
+
+                    var exchSpan = document.createElement('span');
+                    exchSpan.className = 'search-result-exchange';
+                    exchSpan.textContent = r.exchange || '';
+
+                    item.appendChild(symSpan);
+                    item.appendChild(nameSpan);
+                    item.appendChild(exchSpan);
+                    resultsEl.appendChild(item);
+                });
                 resultsEl.classList.add('active');
             } else {
                 resultsEl.innerHTML = '<div class="search-result-item"><span class="search-result-name" style="color:var(--text-muted)">No results found</span></div>';
@@ -79,7 +106,8 @@
 
         // Close dropdowns on outside click
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.search-wrapper') && !e.target.closest('.nav-search-mini')) {
+            if (!e.target.closest('.search-wrapper') && !e.target.closest('.nav-search-mini') &&
+                !e.target.closest('.search-results')) {
                 document.querySelectorAll('.search-results').forEach(el => el.classList.remove('active'));
             }
         });

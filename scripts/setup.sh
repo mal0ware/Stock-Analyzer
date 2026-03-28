@@ -154,20 +154,20 @@ echo ""
 echo "Step 3/5: Setting up Java..."
 
 install_java_local() {
-    echo "  Installing JDK 17 to ~/.local/jdk ..."
+    echo "  Installing JDK 21 to ~/.local/jdk ..."
     mkdir -p "$HOME/.local/jdk"
 
     if [ "$OS" = "mac" ]; then
         if [ "$ARCH" = "arm64" ]; then
-            JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/mac/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
+            JDK_URL="https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
         else
-            JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/mac/x64/jdk/hotspot/normal/eclipse?project=jdk"
+            JDK_URL="https://api.adoptium.net/v3/binary/latest/21/ga/mac/x64/jdk/hotspot/normal/eclipse?project=jdk"
         fi
     else
         if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-            JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/linux/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
+            JDK_URL="https://api.adoptium.net/v3/binary/latest/21/ga/linux/aarch64/jdk/hotspot/normal/eclipse?project=jdk"
         else
-            JDK_URL="https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk"
+            JDK_URL="https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk"
         fi
     fi
 
@@ -183,7 +183,7 @@ install_java_local() {
         rm -rf /tmp/jdk_move
         export PATH="$HOME/.local/jdk/bin:$PATH"
     fi
-    success "JDK 17 installed to ~/.local/jdk"
+    success "JDK 21 installed to ~/.local/jdk"
 }
 
 if ! command -v javac &>/dev/null; then
@@ -195,17 +195,17 @@ if ! command -v javac &>/dev/null; then
         INSTALLED_JAVA=false
         if [ "$OS" = "mac" ] && command -v brew &>/dev/null; then
             echo "  Installing Java via Homebrew..."
-            brew install openjdk@17 2>/dev/null && INSTALLED_JAVA=true
+            brew install openjdk@21 2>/dev/null && INSTALLED_JAVA=true
             if [ "$INSTALLED_JAVA" = true ]; then
                 # Homebrew OpenJDK needs to be symlinked
-                sudo ln -sfn "$(brew --prefix openjdk@17)/libexec/openjdk.jdk" /Library/Java/JavaVirtualMachines/openjdk-17.jdk 2>/dev/null || true
-                export PATH="$(brew --prefix openjdk@17)/bin:$PATH"
+                sudo ln -sfn "$(brew --prefix openjdk@21)/libexec/openjdk.jdk" /Library/Java/JavaVirtualMachines/openjdk-21.jdk 2>/dev/null || true
+                export PATH="$(brew --prefix openjdk@21)/bin:$PATH"
             fi
         elif [ "$OS" = "linux" ] && [ "$HAS_SUDO" = true ]; then
             if command -v apt &>/dev/null; then
                 sudo apt install -y -qq default-jdk 2>/dev/null && INSTALLED_JAVA=true
             elif command -v dnf &>/dev/null; then
-                sudo dnf install -y java-17-openjdk-devel 2>/dev/null && INSTALLED_JAVA=true
+                sudo dnf install -y java-21-openjdk-devel 2>/dev/null && INSTALLED_JAVA=true
             elif command -v pacman &>/dev/null; then
                 sudo pacman -S --noconfirm jdk-openjdk 2>/dev/null && INSTALLED_JAVA=true
             fi
@@ -220,12 +220,17 @@ else
     success "Java found: $(javac --version 2>&1 | head -1)"
 fi
 
-# Compile Java modules
-echo "  Compiling Java modules..."
-mkdir -p "$PROJECT_DIR/build/java"
+# Find javac — check PATH first, then known local install location
+JAVAC=""
 if command -v javac &>/dev/null; then
-    javac -d "$PROJECT_DIR/build/java" "$PROJECT_DIR/src/java/src/analyzer/"*.java
-    success "Java modules compiled"
+    JAVAC="$(command -v javac)"
+elif [ -f "$HOME/.local/jdk/bin/javac" ]; then
+    JAVAC="$HOME/.local/jdk/bin/javac"
+    export PATH="$HOME/.local/jdk/bin:$PATH"
+fi
+
+if [ -n "$JAVAC" ]; then
+    success "Java compiler found: $($JAVAC --version 2>&1 | head -1)"
 else
     warn "javac not found — Java interpretation features will be unavailable"
 fi
@@ -289,6 +294,14 @@ if [ -f build/stock_analyzer ]; then
     success "Application built successfully"
 else
     fail "Build failed. Check the output above for errors."
+fi
+
+# Compile Java modules (after build so make clean doesn't wipe them)
+if [ -n "$JAVAC" ]; then
+    echo "  Compiling Java modules..."
+    mkdir -p "$PROJECT_DIR/build/java"
+    "$JAVAC" -d "$PROJECT_DIR/build/java" "$PROJECT_DIR/src/java/src/analyzer/"*.java
+    success "Java modules compiled"
 fi
 
 # ==============================================================

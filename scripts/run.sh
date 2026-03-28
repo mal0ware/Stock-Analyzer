@@ -21,10 +21,16 @@ fi
 
 # ---- Ensure Java classes exist ----
 if [ ! -f "$PROJECT_DIR/build/java/analyzer/Interpreter.class" ]; then
-    if command -v javac &> /dev/null; then
+    JAVAC=""
+    if command -v javac &>/dev/null; then
+        JAVAC="javac"
+    elif [ -f "$HOME/.local/jdk/bin/javac" ]; then
+        JAVAC="$HOME/.local/jdk/bin/javac"
+    fi
+    if [ -n "$JAVAC" ]; then
         echo "Compiling Java modules..."
         mkdir -p "$PROJECT_DIR/build/java"
-        javac -d "$PROJECT_DIR/build/java" "$PROJECT_DIR/src/java/src/analyzer/"*.java 2>/dev/null
+        "$JAVAC" -d "$PROJECT_DIR/build/java" "$PROJECT_DIR/src/java/src/analyzer/"*.java 2>/dev/null
     fi
 fi
 
@@ -49,6 +55,8 @@ if grep -qi "microsoft" /proc/version 2>/dev/null; then
 fi
 
 # ---- Helper: launch a Windows browser window in app mode ----
+# Sets BROWSER_PID to the launched process so we can detect when it closes.
+BROWSER_PID=""
 launch_windows_window() {
     local url="$1"
     local EDGE1="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
@@ -59,13 +67,15 @@ launch_windows_window() {
     for browser in "$EDGE1" "$EDGE2" "$CHROME1" "$CHROME2"; do
         if [ -f "$browser" ]; then
             "$browser" "--app=$url" "--window-size=1320,880" &>/dev/null &
+            BROWSER_PID=$!
             return 0
         fi
     done
 
     # Fallback: use PowerShell to start Edge in app mode
     if command -v powershell.exe &>/dev/null; then
-        powershell.exe -Command "Start-Process 'msedge' '--app=$url --window-size=1320,880'" &>/dev/null
+        powershell.exe -Command "Start-Process 'msedge' '--app=$url --window-size=1320,880'" &>/dev/null &
+        BROWSER_PID=$!
         return 0
     fi
 
@@ -103,12 +113,36 @@ if $IS_WSL; then
 
     echo ""
     echo "Stock Analyzer is running at http://localhost:8089"
-    echo "Press Ctrl+C to stop."
+    echo "Close the window or press Ctrl+C to stop."
     echo ""
 
-    # Keep running until user hits Ctrl+C or backend exits
-    trap "echo ''; echo 'Shutting down...'; kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
-    wait $BACKEND_PID
+    # Shut down backend when the script exits (window closed or Ctrl+C)
+    cleanup() {
+        echo ""
+        echo "Shutting down..."
+        kill $BACKEND_PID 2>/dev/null
+        wait $BACKEND_PID 2>/dev/null
+        exit 0
+    }
+    trap cleanup INT TERM
+
+    # Wait for the browser window to close, then stop the backend
+    if [ -n "$BROWSER_PID" ]; then
+        # Poll until the browser process exits
+        while kill -0 $BROWSER_PID 2>/dev/null; do
+            # Also check backend is still alive
+            if ! kill -0 $BACKEND_PID 2>/dev/null; then
+                echo "Backend stopped unexpectedly."
+                exit 1
+            fi
+            sleep 1
+        done
+        echo "Window closed."
+        cleanup
+    else
+        # No browser PID — fall back to waiting for backend
+        wait $BACKEND_PID
+    fi
     exit 0
 fi
 
@@ -157,7 +191,7 @@ else
 
         echo "Stock Analyzer is running at http://localhost:8089"
         echo "Press Ctrl+C to stop."
-        trap "kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
+        trap "echo ''; echo 'Shutting down...'; kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
         wait $BACKEND_PID
     fi
 fi
