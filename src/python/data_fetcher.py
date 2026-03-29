@@ -38,11 +38,24 @@ def fetch_quote(ticker_symbol: str) -> dict:
         ticker = yf.Ticker(ticker_symbol)
         info = ticker.info
 
-        if not info or info.get("trailingPegRatio") is None and info.get("regularMarketPrice") is None:
-            # Try fast_info as fallback
-            fi = ticker.fast_info
-            if fi is None:
-                return {"error": f"No data found for '{ticker_symbol}'"}
+        if not info or (not info.get("regularMarketPrice") and not info.get("currentPrice")):
+            # ticker.info came back empty or without a price — try fast_info
+            try:
+                fi = ticker.fast_info
+                if fi and hasattr(fi, 'last_price') and fi.last_price:
+                    # Populate minimal result from fast_info
+                    return {
+                        "symbol": ticker_symbol.upper(),
+                        "name": ticker_symbol.upper(),
+                        "price": round(float(fi.last_price), 2) if fi.last_price else None,
+                        "previousClose": round(float(fi.previous_close), 2) if hasattr(fi, 'previous_close') and fi.previous_close else None,
+                        "marketCap": int(fi.market_cap) if hasattr(fi, 'market_cap') and fi.market_cap else None,
+                        "volume": int(fi.last_volume) if hasattr(fi, 'last_volume') and fi.last_volume else None,
+                        "change": None, "changePercent": None,
+                    }
+            except Exception:
+                pass
+            return {"error": f"No data found for '{ticker_symbol}'"}
 
         result = {
             "symbol": info.get("symbol", ticker_symbol.upper()),

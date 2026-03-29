@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <sstream>
+#include <iostream>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <cstring>
@@ -134,9 +135,16 @@ std::string run(const std::string& executable, const std::vector<std::string>& a
     int status;
     waitpid(pid, &status, 0);
 
-    if (WIFEXITED(status) && WEXITSTATUS(status) != 0 && output.empty()) {
-        return "{\"error\":\"Command failed with exit code " +
-               std::to_string(WEXITSTATUS(status)) + "\"}";
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        int exitCode = WEXITSTATUS(status);
+        std::cerr << "[subprocess] " << executable << " exited with code " << exitCode << std::endl;
+        if (!output.empty()) {
+            std::cerr << "[subprocess] output: " << output.substr(0, 500) << std::endl;
+        }
+        if (output.empty()) {
+            return "{\"error\":\"Command failed with exit code " +
+                   std::to_string(exitCode) + "\"}";
+        }
     }
 
     return output;
@@ -188,7 +196,18 @@ std::string runPython(const std::string& script, const std::vector<std::string>&
         path = getBasePath() + "/../src/python/" + script;
     }
 
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "[runPython] Script not found: " << path << " (basePath=" << getBasePath() << ")" << std::endl;
+        return "{\"error\":\"Python script not found: " + script + "\"}";
+    }
+
     std::string python = findExecutable("python3");
+    static bool logged = false;
+    if (!logged) {
+        std::cerr << "[runPython] Using python: " << python << ", script: " << path << std::endl;
+        logged = true;
+    }
+
     std::vector<std::string> fullArgs = {path};
     fullArgs.insert(fullArgs.end(), args.begin(), args.end());
 
