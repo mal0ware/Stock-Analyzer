@@ -150,23 +150,27 @@ static std::string findExecutable(const std::string& name) {
     std::vector<std::string> candidates;
 
     if (name == "java") {
+        // User-local installs first (setup.sh puts JDK here)
         if (!home.empty()) {
             candidates.push_back(home + "/.local/jdk/bin/java");
             candidates.push_back(home + "/.sdkman/candidates/java/current/bin/java");
         }
-        candidates.push_back("/usr/bin/java");
-        candidates.push_back("/usr/local/bin/java");
-        // macOS Homebrew paths
+        // macOS Homebrew (Apple Silicon then Intel) — before system paths
+        // because Homebrew versions have user-installed packages
         candidates.push_back("/opt/homebrew/bin/java");
         candidates.push_back("/opt/homebrew/opt/openjdk/bin/java");
+        candidates.push_back("/usr/local/bin/java");
+        candidates.push_back("/usr/bin/java");
     } else if (name == "python3") {
+        // macOS Homebrew first — this is where pip packages (yfinance) get installed.
+        // The system /usr/bin/python3 on macOS is Xcode's bare Python which does NOT
+        // have user-installed packages, so it must be checked LAST.
+        candidates.push_back("/opt/homebrew/bin/python3");
         if (!home.empty()) {
             candidates.push_back(home + "/.local/bin/python3");
         }
-        candidates.push_back("/usr/bin/python3");
         candidates.push_back("/usr/local/bin/python3");
-        // macOS Homebrew paths
-        candidates.push_back("/opt/homebrew/bin/python3");
+        candidates.push_back("/usr/bin/python3");
     }
 
     for (auto& c : candidates) {
