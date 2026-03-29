@@ -52,7 +52,7 @@
             loadInterpretation();
             loadNews();
         } catch(e) {
-            showError('Failed to load stock data.');
+            showError('Failed to load stock data. Check the terminal for errors, or open /api/diagnostics in your browser.');
         }
     }
 
