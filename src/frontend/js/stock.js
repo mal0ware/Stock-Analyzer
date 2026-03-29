@@ -28,6 +28,12 @@
     async function loadStockData() {
         try {
             var res = await fetch('/api/quote/' + encodeURIComponent(currentSymbol));
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                showError(errData && errData.error ? errData.error : 'Server error (HTTP ' + res.status + '). Open /api/diagnostics in your browser to check setup.');
+                return;
+            }
             var quote = await res.json();
             if (quote.error) { showError(quote.error); return; }
             quoteData = quote;

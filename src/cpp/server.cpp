@@ -110,6 +110,31 @@ static void sendError(httplib::Response& res, int status, const std::string& mes
     res.set_content(err.dump(), "application/json");
 }
 
+// Validate subprocess output is valid JSON; if not, return a clean error response.
+// Logs the raw output to stderr for debugging.
+static bool sendJsonResult(httplib::Response& res, const std::string& result, const std::string& context) {
+    if (result.empty()) {
+        std::cerr << "[" << context << "] subprocess returned empty output" << std::endl;
+        sendError(res, 502, "Backend script returned no data");
+        return false;
+    }
+    // Quick check: valid JSON starts with { or [
+    char first = '\0';
+    for (char c : result) {
+        if (!std::isspace(static_cast<unsigned char>(c))) { first = c; break; }
+    }
+    if (first != '{' && first != '[') {
+        // Not JSON — likely a Python traceback or error message
+        std::cerr << "[" << context << "] subprocess returned non-JSON:\n" << result.substr(0, 500) << std::endl;
+        // Try to extract a useful message from the first line
+        std::string firstLine = result.substr(0, result.find('\n'));
+        sendError(res, 502, "Backend error: " + firstLine);
+        return false;
+    }
+    res.set_content(result, "application/json");
+    return true;
+}
+
 static void setupRoutes() {
     std::string basePath = subprocess::getBasePath();
     std::string frontendPath = basePath + "/frontend";
@@ -189,6 +214,36 @@ static void setupRoutes() {
         res.set_content("{\"status\":\"ok\"}", "application/json");
     });
 
+    // Diagnostics — checks Python, yfinance, Java, and script paths
+    svr.Get("/api/diagnostics", [](const httplib::Request&, httplib::Response& res) {
+        json diag;
+        std::string base = subprocess::getBasePath();
+        diag["basePath"] = base;
+
+        // Check script paths
+        diag["scriptPath1"] = base + "/python/data_fetcher.py";
+        diag["scriptPath1Exists"] = std::filesystem::exists(base + "/python/data_fetcher.py");
+        diag["scriptPath2"] = base + "/../src/python/data_fetcher.py";
+        diag["scriptPath2Exists"] = std::filesystem::exists(base + "/../src/python/data_fetcher.py");
+
+        // Check Python + yfinance with a quick non-network test
+        std::string pyCheck = subprocess::run("python3",
+            {"-c", "import yfinance; print('{\"yfinance\":\"' + yfinance.__version__ + '\"}')"});
+        diag["pythonCheck"] = pyCheck.substr(0, 200);
+        diag["yfinanceInstalled"] = pyCheck.find("yfinance") != std::string::npos;
+
+        // Check which python3 resolves to
+        std::string whichPy = subprocess::run("python3", {"--version"});
+        diag["pythonVersion"] = whichPy.substr(0, 100);
+
+        // Check Java
+        std::string classPath = base + "/java";
+        diag["javaClassPath"] = classPath;
+        diag["javaClassExists"] = std::filesystem::exists(classPath + "/analyzer/Interpreter.class");
+
+        res.set_content(diag.dump(2), "application/json");
+    });
+
     // Search for tickers
     svr.Get("/api/search", [](const httplib::Request& req, httplib::Response& res) {
         auto query = req.get_param_value("q");
@@ -210,8 +265,9 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("data_fetcher.py", {"search", query});
-        Cache::instance().set(cacheKey, result, 300);
-        res.set_content(result, "application/json");
+        if (sendJsonResult(res, result, "search")) {
+            Cache::instance().set(cacheKey, result, 300);
+        }
     });
 
     // Get stock quote
@@ -231,8 +287,9 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("data_fetcher.py", {"quote", symbol});
-        Cache::instance().set(cacheKey, result, 30);
-        res.set_content(result, "application/json");
+        if (sendJsonResult(res, result, "quote:" + symbol)) {
+            Cache::instance().set(cacheKey, result, 30);
+        }
     });
 
     // Get stock history
@@ -258,9 +315,10 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("data_fetcher.py", {"history", symbol, period});
-        int ttl = (period == "1d" || period == "5d") ? 60 : 300;
-        Cache::instance().set(cacheKey, result, ttl);
-        res.set_content(result, "application/json");
+        if (sendJsonResult(res, result, "history:" + symbol)) {
+            int ttl = (period == "1d" || period == "5d") ? 60 : 300;
+            Cache::instance().set(cacheKey, result, ttl);
+        }
     });
 
     // Get technical analysis
@@ -348,8 +406,9 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("news_fetcher.py", {symbol});
-        Cache::instance().set(cacheKey, result, 300);
-        res.set_content(result, "application/json");
+        if (sendJsonResult(res, result, "news:" + symbol)) {
+            Cache::instance().set(cacheKey, result, 300);
+        }
     });
 
     // Get glossary (Java)
