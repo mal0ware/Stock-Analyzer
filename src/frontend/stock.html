@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Analyzer</title>
-    <link rel="stylesheet" href="css/styles.css?v=4">
+    <link rel="stylesheet" href="css/styles.css?v=5">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -59,9 +59,13 @@
 
         <!-- Error State -->
         <div class="error-state hidden" id="errorState">
-            <h2>Stock Not Found</h2>
+            <h2 id="errorHeading">Stock Not Found</h2>
             <p id="errorMessage">We couldn't find data for this symbol.</p>
-            <button class="back-btn" onclick="window.location='index.html'">Back to Search</button>
+            <p id="errorSuggestion" class="muted"></p>
+            <div style="display:flex; gap:0.75rem; justify-content:center; margin-top:1.25rem; flex-wrap:wrap;">
+                <button class="back-btn" onclick="window.location.reload()">Retry</button>
+                <button class="back-btn secondary" onclick="window.location='index.html'">Back to Search</button>
+            </div>
         </div>
 
         <!-- Stock Content (hidden until loaded) -->
@@ -161,9 +165,9 @@
         For educational and informational purposes only. Not financial advice.
     </footer>
 
-    <script src="js/theme.js?v=4"></script>
-    <script src="js/search.js?v=4"></script>
-    <script src="js/chart_render.js?v=4"></script>
-    <script src="js/stock.js?v=4"></script>
+    <script src="js/theme.js?v=5"></script>
+    <script src="js/search.js?v=5"></script>
+    <script src="js/chart_render.js?v=5"></script>
+    <script src="js/stock.js?v=5"></script>
 </body>
 </html>

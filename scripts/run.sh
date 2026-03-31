@@ -160,7 +160,7 @@ fi
 if [ -n "$ELECTRON_BIN" ]; then
     echo "Starting Stock Analyzer..."
     cd "$PROJECT_DIR/src/electron"
-    exec npx electron . --no-sandbox 2>/dev/null
+    exec "$ELECTRON_BIN" . --no-sandbox 2>/dev/null
 else
     if command -v npm &> /dev/null; then
         echo "Installing Electron (first run)..."

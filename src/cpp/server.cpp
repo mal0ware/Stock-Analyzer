@@ -25,13 +25,11 @@ static int serverPort = 8089;
 // ================================================================
 class RateLimiter {
 public:
-    // Returns true if the request is allowed, false if rate-limited.
     bool allow(const std::string& ip, int maxRequests = 60, int windowSeconds = 60) {
         std::lock_guard<std::mutex> lock(mtx);
         auto now = std::chrono::steady_clock::now();
         auto& bucket = buckets[ip];
 
-        // Reset bucket if window has expired
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - bucket.windowStart).count();
         if (elapsed >= windowSeconds) {
             bucket.count = 0;
@@ -42,7 +40,6 @@ public:
         return bucket.count <= maxRequests;
     }
 
-    // Periodic cleanup of stale entries to prevent unbounded memory growth
     void cleanup(int maxAgeSeconds = 300) {
         std::lock_guard<std::mutex> lock(mtx);
         auto now = std::chrono::steady_clock::now();
@@ -102,7 +99,11 @@ static bool isValidQuery(const std::string& s) {
     return true;
 }
 
-// Return a JSON error response with the given HTTP status code
+// ================================================================
+// Response helpers
+// ================================================================
+
+// Return a JSON error response with the given HTTP status code.
 static void sendError(httplib::Response& res, int status, const std::string& message) {
     json err;
     err["error"] = message;
@@ -110,29 +111,37 @@ static void sendError(httplib::Response& res, int status, const std::string& mes
     res.set_content(err.dump(), "application/json");
 }
 
-// Validate subprocess output is valid JSON; if not, return a clean error response.
-// Logs the raw output to stderr for debugging.
+// Validate subprocess output is valid JSON, send it as the response.
+// If the JSON contains an "error" key, forward it as a 404.
+// Logs raw output to stderr on failure for debugging.
+// Returns true if response was sent successfully, false on error.
 static bool sendJsonResult(httplib::Response& res, const std::string& result, const std::string& context) {
     if (result.empty()) {
         std::cerr << "[" << context << "] subprocess returned empty output" << std::endl;
-        sendError(res, 502, "Backend script returned no data");
+        sendError(res, 502, "No response from backend for " + context + ". Check server logs for details.");
         return false;
     }
-    // Quick check: valid JSON starts with { or [
-    char first = '\0';
-    for (char c : result) {
-        if (!std::isspace(static_cast<unsigned char>(c))) { first = c; break; }
-    }
-    if (first != '{' && first != '[') {
-        // Not JSON — likely a Python traceback or error message
-        std::cerr << "[" << context << "] subprocess returned non-JSON:\n" << result.substr(0, 500) << std::endl;
-        // Try to extract a useful message from the first line
-        std::string firstLine = result.substr(0, result.find('\n'));
-        sendError(res, 502, "Backend error: " + firstLine);
+
+    // Parse the JSON to validate it and check for error payloads
+    try {
+        auto parsed = json::parse(result);
+
+        // If the Python script returned {"error": "..."}, forward it as a 404
+        if (parsed.contains("error") && !parsed.contains("results") && !parsed.contains("articles")) {
+            std::string errMsg = parsed["error"].get<std::string>();
+            std::cerr << "[" << context << "] backend error: " << errMsg << std::endl;
+            sendError(res, 404, errMsg);
+            return false;
+        }
+
+        res.set_content(result, "application/json");
+        return true;
+    } catch (const json::parse_error& e) {
+        std::cerr << "[" << context << "] invalid JSON from subprocess: " << e.what()
+                  << "\nRaw output (first 500 chars): " << result.substr(0, 500) << std::endl;
+        sendError(res, 502, "Backend returned invalid data for " + context + ". Check server logs.");
         return false;
     }
-    res.set_content(result, "application/json");
-    return true;
 }
 
 static void setupRoutes() {
@@ -152,32 +161,18 @@ static void setupRoutes() {
     // Applied to every response from the server.
     // ============================================================
     svr.set_post_routing_handler([](const httplib::Request& req, httplib::Response& res) {
-        // CORS — allow both localhost and 127.0.0.1 since this is a local-only app.
-        // Electron uses 127.0.0.1, WSL Edge uses localhost — both must work.
         std::string origin = req.get_header_value("Origin");
         if (origin == "http://localhost:8089" || origin == "http://127.0.0.1:8089") {
             res.set_header("Access-Control-Allow-Origin", origin);
         } else {
-            // For same-origin requests (no Origin header), allow localhost
             res.set_header("Access-Control-Allow-Origin", "http://localhost:8089");
         }
         res.set_header("Access-Control-Allow-Methods", "GET, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type");
-
-        // Prevent MIME-type sniffing attacks
         res.set_header("X-Content-Type-Options", "nosniff");
-
-        // Prevent clickjacking via iframes
         res.set_header("X-Frame-Options", "DENY");
-
-        // XSS protection for legacy browsers
         res.set_header("X-XSS-Protection", "1; mode=block");
-
-        // Don't leak referrer URLs to external sites
         res.set_header("Referrer-Policy", "strict-origin-when-cross-origin");
-
-        // Content Security Policy — whitelist trusted sources only.
-        // Allow connections to both localhost and 127.0.0.1 for cross-platform compat.
         res.set_header("Content-Security-Policy",
             "default-src 'self'; "
             "script-src 'self' https://cdn.jsdelivr.net; "
@@ -191,16 +186,14 @@ static void setupRoutes() {
 
     // ============================================================
     // Rate limiting — 60 requests/minute per IP
-    // Returns HTTP 429 with Retry-After header when exceeded.
     // ============================================================
     svr.set_pre_routing_handler([](const httplib::Request& req, httplib::Response& res) -> httplib::Server::HandlerResponse {
-        // Only rate-limit API endpoints, not static files
         if (req.path.rfind("/api/", 0) == 0) {
             if (!rateLimiter.allow(req.remote_addr)) {
                 res.status = 429;
                 res.set_header("Retry-After", "60");
                 res.set_content(
-                    "{\"error\":\"Too many requests. Please wait before trying again.\"}",
+                    "{\"error\":\"Too many requests. Please wait 60 seconds before trying again.\"}",
                     "application/json"
                 );
                 return httplib::Server::HandlerResponse::Handled;
@@ -209,30 +202,32 @@ static void setupRoutes() {
         return httplib::Server::HandlerResponse::Unhandled;
     });
 
+    // ============================================================
     // Health check
+    // ============================================================
     svr.Get("/api/health", [](const httplib::Request&, httplib::Response& res) {
         res.set_content("{\"status\":\"ok\"}", "application/json");
     });
 
+    // ============================================================
     // Diagnostics — checks Python, yfinance, Java, and script paths
+    // ============================================================
     svr.Get("/api/diagnostics", [](const httplib::Request&, httplib::Response& res) {
         json diag;
         std::string base = subprocess::getBasePath();
         diag["basePath"] = base;
 
         // Check script paths
-        diag["scriptPath1"] = base + "/python/data_fetcher.py";
-        diag["scriptPath1Exists"] = std::filesystem::exists(base + "/python/data_fetcher.py");
-        diag["scriptPath2"] = base + "/../src/python/data_fetcher.py";
-        diag["scriptPath2Exists"] = std::filesystem::exists(base + "/../src/python/data_fetcher.py");
+        std::string scriptPath1 = base + "/python/data_fetcher.py";
+        std::string scriptPath2 = base + "/../src/python/data_fetcher.py";
+        diag["scriptPath"] = std::filesystem::exists(scriptPath1) ? scriptPath1 : scriptPath2;
+        diag["scriptExists"] = std::filesystem::exists(scriptPath1) || std::filesystem::exists(scriptPath2);
 
-        // Check Python + yfinance with a quick non-network test
-        std::string pyCheck = subprocess::run("python3",
-            {"-c", "import yfinance; print('{\"yfinance\":\"' + yfinance.__version__ + '\"}')"});
-        diag["pythonCheck"] = pyCheck.substr(0, 200);
-        diag["yfinanceInstalled"] = pyCheck.find("yfinance") != std::string::npos;
+        // Check Python + yfinance
+        std::string pyCheck = subprocess::runPython("data_fetcher.py", {"--version-check"});
+        diag["pythonCheck"] = pyCheck.substr(0, 300);
 
-        // Check which python3 resolves to
+        // Check which python3 is being used
         std::string whichPy = subprocess::run("python3", {"--version"});
         diag["pythonVersion"] = whichPy.substr(0, 100);
 
@@ -244,7 +239,9 @@ static void setupRoutes() {
         res.set_content(diag.dump(2), "application/json");
     });
 
+    // ============================================================
     // Search for tickers
+    // ============================================================
     svr.Get("/api/search", [](const httplib::Request& req, httplib::Response& res) {
         auto query = req.get_param_value("q");
         if (query.empty()) {
@@ -265,17 +262,32 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("data_fetcher.py", {"search", query});
-        if (sendJsonResult(res, result, "search")) {
-            Cache::instance().set(cacheKey, result, 300);
+
+        // For search, always return results array even on error
+        try {
+            auto parsed = json::parse(result);
+            if (parsed.contains("results")) {
+                Cache::instance().set(cacheKey, result, 300);
+                res.set_content(result, "application/json");
+            } else {
+                std::cerr << "[search] unexpected response format: " << result.substr(0, 200) << std::endl;
+                res.set_content("{\"results\":[]}", "application/json");
+            }
+        } catch (const json::parse_error& e) {
+            std::cerr << "[search] invalid JSON: " << e.what()
+                      << "\nRaw: " << result.substr(0, 300) << std::endl;
+            res.set_content("{\"results\":[]}", "application/json");
         }
     });
 
+    // ============================================================
     // Get stock quote
+    // ============================================================
     svr.Get("/api/quote/:symbol", [](const httplib::Request& req, httplib::Response& res) {
         auto symbol = req.path_params.at("symbol");
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol. Use 1-10 alphanumeric characters.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'. Use 1-10 alphanumeric characters, dots, or hyphens.");
             return;
         }
 
@@ -292,18 +304,20 @@ static void setupRoutes() {
         }
     });
 
+    // ============================================================
     // Get stock history
+    // ============================================================
     svr.Get("/api/history/:symbol", [](const httplib::Request& req, httplib::Response& res) {
         auto symbol = req.path_params.at("symbol");
         auto period = req.get_param_value("period");
         if (period.empty()) period = "1mo";
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'.");
             return;
         }
         if (!isValidPeriod(period)) {
-            sendError(res, 400, "Invalid period. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
+            sendError(res, 400, "Invalid period '" + period + "'. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
             return;
         }
 
@@ -315,24 +329,26 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("data_fetcher.py", {"history", symbol, period});
-        if (sendJsonResult(res, result, "history:" + symbol)) {
+        if (sendJsonResult(res, result, "history:" + symbol + ":" + period)) {
             int ttl = (period == "1d" || period == "5d") ? 60 : 300;
             Cache::instance().set(cacheKey, result, ttl);
         }
     });
 
+    // ============================================================
     // Get technical analysis
+    // ============================================================
     svr.Get("/api/analysis/:symbol", [](const httplib::Request& req, httplib::Response& res) {
         auto symbol = req.path_params.at("symbol");
         auto period = req.get_param_value("period");
         if (period.empty()) period = "1y";
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'.");
             return;
         }
         if (!isValidPeriod(period)) {
-            sendError(res, 400, "Invalid period. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
+            sendError(res, 400, "Invalid period '" + period + "'. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
             return;
         }
 
@@ -348,7 +364,9 @@ static void setupRoutes() {
         try {
             json historyData = json::parse(historyStr);
             if (historyData.contains("error")) {
-                res.set_content(historyStr, "application/json");
+                std::string errMsg = historyData["error"].get<std::string>();
+                std::cerr << "[analysis:" << symbol << "] history fetch failed: " << errMsg << std::endl;
+                sendError(res, 404, "Cannot analyze " + symbol + ": " + errMsg);
                 return;
             }
 
@@ -357,17 +375,24 @@ static void setupRoutes() {
 
             Cache::instance().set(cacheKey, result, 120);
             res.set_content(result, "application/json");
-        } catch (const std::exception&) {
-            sendError(res, 500, "Analysis failed");
+        } catch (const json::parse_error& e) {
+            std::cerr << "[analysis:" << symbol << "] JSON parse error: " << e.what()
+                      << "\nRaw: " << historyStr.substr(0, 300) << std::endl;
+            sendError(res, 502, "Failed to parse history data for analysis of " + symbol);
+        } catch (const std::exception& e) {
+            std::cerr << "[analysis:" << symbol << "] exception: " << e.what() << std::endl;
+            sendError(res, 500, "Analysis failed for " + symbol + ": " + std::string(e.what()));
         }
     });
 
+    // ============================================================
     // Get plain-English interpretation (Java)
+    // ============================================================
     svr.Get("/api/interpret/:symbol", [](const httplib::Request& req, httplib::Response& res) {
         auto symbol = req.path_params.at("symbol");
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'.");
             return;
         }
 
@@ -378,23 +403,50 @@ static void setupRoutes() {
             return;
         }
 
+        // Fetch the quote data first — validate before passing to Java
         std::string quoteStr = subprocess::runPython("data_fetcher.py", {"quote", symbol});
+        try {
+            auto quoteJson = json::parse(quoteStr);
+            if (quoteJson.contains("error") && !quoteJson.contains("price")) {
+                std::string errMsg = quoteJson["error"].get<std::string>();
+                std::cerr << "[interpret:" << symbol << "] quote fetch failed: " << errMsg << std::endl;
+                sendError(res, 404, "Cannot interpret " + symbol + ": " + errMsg);
+                return;
+            }
+        } catch (const json::parse_error& e) {
+            std::cerr << "[interpret:" << symbol << "] quote JSON parse error: " << e.what() << std::endl;
+            sendError(res, 502, "Failed to fetch quote data for interpretation of " + symbol);
+            return;
+        }
+
         std::string result = subprocess::runJava("analyzer.Interpreter", {}, quoteStr);
 
         if (!result.empty()) {
-            Cache::instance().set(cacheKey, result, 60);
-            res.set_content(result, "application/json");
+            // Validate the Java output is proper JSON before caching
+            try {
+                auto parsed = json::parse(result);
+                (void)parsed; // validate only
+                Cache::instance().set(cacheKey, result, 60);
+                res.set_content(result, "application/json");
+            } catch (const json::parse_error& e) {
+                std::cerr << "[interpret:" << symbol << "] Java returned invalid JSON: " << e.what()
+                          << "\nRaw: " << result.substr(0, 300) << std::endl;
+                res.set_content("{\"insights\":[\"Interpretation temporarily unavailable.\"]}", "application/json");
+            }
         } else {
-            res.set_content("{\"insights\":[\"Interpretation unavailable.\"]}", "application/json");
+            std::cerr << "[interpret:" << symbol << "] Java returned empty output" << std::endl;
+            res.set_content("{\"insights\":[\"Interpretation unavailable — Java backend returned no data.\"]}", "application/json");
         }
     });
 
+    // ============================================================
     // Get news
+    // ============================================================
     svr.Get("/api/news/:symbol", [](const httplib::Request& req, httplib::Response& res) {
         auto symbol = req.path_params.at("symbol");
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'.");
             return;
         }
 
@@ -406,12 +458,27 @@ static void setupRoutes() {
         }
 
         std::string result = subprocess::runPython("news_fetcher.py", {symbol});
-        if (sendJsonResult(res, result, "news:" + symbol)) {
-            Cache::instance().set(cacheKey, result, 300);
+
+        // For news, always return a valid articles array
+        try {
+            auto parsed = json::parse(result);
+            if (parsed.contains("articles")) {
+                Cache::instance().set(cacheKey, result, 300);
+                res.set_content(result, "application/json");
+            } else {
+                std::cerr << "[news:" << symbol << "] unexpected format: " << result.substr(0, 200) << std::endl;
+                res.set_content("{\"articles\":[]}", "application/json");
+            }
+        } catch (const json::parse_error& e) {
+            std::cerr << "[news:" << symbol << "] invalid JSON: " << e.what()
+                      << "\nRaw: " << result.substr(0, 300) << std::endl;
+            res.set_content("{\"articles\":[]}", "application/json");
         }
     });
 
+    // ============================================================
     // Get glossary (Java)
+    // ============================================================
     svr.Get("/api/glossary", [](const httplib::Request&, httplib::Response& res) {
         std::string cached = Cache::instance().get("glossary");
         if (!cached.empty()) {
@@ -422,9 +489,17 @@ static void setupRoutes() {
         std::string result = subprocess::runJava("analyzer.Glossary", {"all"});
 
         if (!result.empty()) {
-            Cache::instance().set("glossary", result, 3600);
-            res.set_content(result, "application/json");
+            try {
+                auto parsed = json::parse(result);
+                (void)parsed; // validate only
+                Cache::instance().set("glossary", result, 3600);
+                res.set_content(result, "application/json");
+            } catch (const json::parse_error& e) {
+                std::cerr << "[glossary] Java returned invalid JSON: " << e.what() << std::endl;
+                res.set_content("{\"terms\":[]}", "application/json");
+            }
         } else {
+            std::cerr << "[glossary] Java returned empty output" << std::endl;
             res.set_content("{\"terms\":[]}", "application/json");
         }
     });
