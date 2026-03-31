@@ -2,27 +2,49 @@
 """
 News fetcher for stock-related headlines.
 Uses yfinance's built-in news feature.
-Outputs JSON to stdout.
+Outputs JSON to stdout. All errors are returned as {"articles": [], "error": "..."}.
+
+stderr is suppressed to prevent yfinance warnings from leaking into
+the parent process — defense-in-depth alongside the C++ stderr separation.
 """
 
 import sys
+import os
 import json
 import re
+import warnings
+
+# Suppress warnings before importing yfinance
+warnings.filterwarnings("ignore")
+os.environ["PYTHONWARNINGS"] = "ignore"
+
 import yfinance as yf
 
-VALID_SYMBOL = re.compile(r'^[A-Za-z0-9.\-]{1,10}$')
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+VALID_SYMBOL = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 
 
 def validate_symbol(s: str) -> str:
     """Validate and normalize a ticker symbol."""
     s = s.strip().upper()
     if not VALID_SYMBOL.match(s):
-        raise ValueError(f"Invalid ticker symbol: {s!r}")
+        raise ValueError(f"Invalid ticker symbol: '{s}'. Use 1-10 alphanumeric characters, dots, or hyphens.")
     return s
 
 
+# ---------------------------------------------------------------------------
+# News fetcher
+# ---------------------------------------------------------------------------
+
 def fetch_news(ticker_symbol: str) -> dict:
-    """Fetch recent news for a ticker."""
+    """
+    Fetch recent news articles for a ticker.
+    Always returns {"articles": [...], "symbol": "..."} — never raises.
+    """
     try:
         ticker = yf.Ticker(ticker_symbol)
         news = ticker.news
@@ -52,8 +74,16 @@ def fetch_news(ticker_symbol: str) -> dict:
         return {"articles": articles, "symbol": ticker_symbol.upper()}
 
     except Exception as e:
-        return {"articles": [], "symbol": ticker_symbol.upper(), "error": str(e)}
+        return {
+            "articles": [],
+            "symbol": ticker_symbol.upper(),
+            "error": f"Failed to fetch news for '{ticker_symbol}': {type(e).__name__}: {e}",
+        }
 
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
 
 def main():
     if len(sys.argv) < 2:
@@ -65,6 +95,7 @@ def main():
     except ValueError as e:
         print(json.dumps({"articles": [], "error": str(e)}))
         sys.exit(1)
+
     result = fetch_news(ticker_symbol)
     print(json.dumps(result))
 

@@ -1,14 +1,37 @@
-/* Stock detail page — data loading, gauges, AI overview, strategy */
+/* Stock detail page — data loading, gauges, AI overview, strategy.
+ *
+ * Every async data loader (quote, chart, analysis, interpretation, news)
+ * handles errors independently so one failure doesn't break the whole page.
+ * Error messages include context (what failed, the HTTP status, and
+ * actionable suggestions) so users and developers can diagnose issues.
+ */
 (function() {
     let currentSymbol = '';
     let currentPeriod = '1mo';
     let quoteData = null;
     let analysisData = null;
 
+    // ================================================================
+    // Page initialization
+    // ================================================================
+
     document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        currentSymbol = (params.get('s') || '').toUpperCase();
-        if (!currentSymbol) { showError('No stock symbol provided.'); return; }
+        var params = new URLSearchParams(window.location.search);
+        currentSymbol = (params.get('s') || '').toUpperCase().trim();
+
+        // Validate the symbol before making any API calls
+        if (!currentSymbol) {
+            showError('No stock symbol provided.', 'Use the search bar to find a stock by ticker or company name.');
+            return;
+        }
+        if (!/^[A-Z0-9.\-]{1,10}$/.test(currentSymbol)) {
+            showError(
+                'Invalid stock symbol: "' + currentSymbol + '".',
+                'Symbols contain only letters, numbers, dots, and hyphens (e.g., AAPL, BRK.B).'
+            );
+            return;
+        }
+
         document.title = currentSymbol + ' — Stock Analyzer';
         loadStockData();
 
@@ -25,17 +48,29 @@
         }
     });
 
+    // ================================================================
+    // Main data loader — fetches quote, then kicks off other loaders
+    // ================================================================
+
     async function loadStockData() {
         try {
             var res = await fetch('/api/quote/' + encodeURIComponent(currentSymbol));
+
             if (!res.ok) {
                 var errData = null;
                 try { errData = await res.json(); } catch(e) {}
-                showError(errData && errData.error ? errData.error : 'Server error (HTTP ' + res.status + '). Open /api/diagnostics in your browser to check setup.');
+                var msg = errData && errData.error
+                    ? errData.error
+                    : 'Server error (HTTP ' + res.status + ')';
+                showError(msg, 'The server could not retrieve data for "' + currentSymbol + '".');
                 return;
             }
+
             var quote = await res.json();
-            if (quote.error) { showError(quote.error); return; }
+            if (quote.error) {
+                showError(quote.error, 'Double-check the ticker symbol, or use the search bar to find the correct one.');
+                return;
+            }
             quoteData = quote;
 
             renderHeader(quote);
@@ -43,18 +78,30 @@
             renderStats(quote);
 
             try { renderAnalystRating(quote); }
-            catch(err) { resolveLoading('analystLoading', 'analystContent', 'Failed to render analyst data'); }
+            catch(err) {
+                console.error('[analystRating]', err);
+                resolveLoading('analystLoading', 'analystContent', 'Failed to render analyst data: ' + err.message);
+            }
 
             showContent();
 
+            // Load remaining sections independently — each handles its own errors
             loadChart();
             loadAnalysis();
             loadInterpretation();
             loadNews();
         } catch(e) {
-            showError('Failed to load stock data. Check the terminal for errors, or open /api/diagnostics in your browser.');
+            console.error('[loadStockData]', e);
+            showError(
+                'Failed to load data for "' + currentSymbol + '": ' + (e.message || 'Network error'),
+                'Check that the server is running. Open /api/diagnostics in your browser for details.'
+            );
         }
     }
+
+    // ================================================================
+    // Header rendering
+    // ================================================================
 
     function renderHeader(q) {
         setText('stockName', q.name || q.symbol);
@@ -71,6 +118,10 @@
             el.innerHTML = '<span class="' + cls + '">' + sign + fmt(change) + ' (' + sign + fmt(pct) + '%)</span>';
         }
     }
+
+    // ================================================================
+    // Description with show more/less toggle
+    // ================================================================
 
     function renderDescription(q) {
         var el = document.getElementById('companyDescription');
@@ -94,6 +145,10 @@
             }
         }
     }
+
+    // ================================================================
+    // Key statistics grid
+    // ================================================================
 
     function renderStats(q) {
         var stats = [
@@ -121,9 +176,10 @@
         }).join('');
     }
 
-    /* ============================================================
-       ANALYST RATING — Gauge + reasons
-       ============================================================ */
+    // ================================================================
+    // Analyst rating — gauge + reasons
+    // ================================================================
+
     function renderAnalystRating(q) {
         var container = document.getElementById('analystContent');
         var loading = document.getElementById('analystLoading');
@@ -138,7 +194,7 @@
         var price = q.price;
 
         if (!rec && !mean && count === 0) {
-            loading.innerHTML = '<span class="muted">No analyst data available</span>';
+            loading.innerHTML = '<span class="muted">No analyst data available for ' + esc(q.symbol) + '</span>';
             return;
         }
 
@@ -219,28 +275,48 @@
         return reasons.slice(0, 5);
     }
 
-    /* ============================================================
-       TECHNICAL RATING — Gauge + indicators
-       ============================================================ */
+    // ================================================================
+    // Technical rating — gauge + indicators
+    // ================================================================
+
     async function loadAnalysis() {
         try {
             var res = await fetch('/api/analysis/' + encodeURIComponent(currentSymbol) + '?period=' + currentPeriod);
+
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'Server error (HTTP ' + res.status + ')';
+                console.error('[loadAnalysis]', msg);
+                resolveLoading('technicalLoading', 'technicalContent', msg);
+                generateOverview();
+                return;
+            }
+
             var data = await res.json();
             if (data.error) {
-                resolveLoading('technicalLoading', 'technicalContent', 'No technical data available');
+                console.error('[loadAnalysis]', data.error);
+                resolveLoading('technicalLoading', 'technicalContent', data.error);
                 generateOverview();
                 return;
             }
             analysisData = data;
 
             try { renderTechnicalRating(data); }
-            catch(err) { resolveLoading('technicalLoading', 'technicalContent', 'Failed to render technical data'); }
+            catch(err) {
+                console.error('[renderTechnicalRating]', err);
+                resolveLoading('technicalLoading', 'technicalContent', 'Failed to render technical data: ' + err.message);
+            }
 
             try { generateOverview(); }
-            catch(err) { resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview'); }
+            catch(err) {
+                console.error('[generateOverview]', err);
+                resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview: ' + err.message);
+            }
 
         } catch(e) {
-            resolveLoading('technicalLoading', 'technicalContent', 'Failed to load technical data');
+            console.error('[loadAnalysis] network error:', e);
+            resolveLoading('technicalLoading', 'technicalContent', 'Failed to load technical data: ' + (e.message || 'Network error'));
             try { generateOverview(); }
             catch(err) { resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview'); }
         }
@@ -315,16 +391,17 @@
         container.classList.remove('hidden');
     }
 
-    /* ============================================================
-       AI OVERVIEW + STRATEGY
-       ============================================================ */
+    // ================================================================
+    // AI overview + strategy
+    // ================================================================
+
     function generateOverview() {
         var container = document.getElementById('overviewContent');
         var loading = document.getElementById('overviewLoading');
         if (!container || !loading) return;
 
         if (!quoteData) {
-            resolveLoading('overviewLoading', 'overviewContent', 'Insufficient data for overview');
+            resolveLoading('overviewLoading', 'overviewContent', 'Insufficient data to generate overview for ' + currentSymbol);
             return;
         }
 
@@ -421,9 +498,10 @@
         container.classList.remove('hidden');
     }
 
-    /* ============================================================
-       SVG GAUGE
-       ============================================================ */
+    // ================================================================
+    // SVG gauge
+    // ================================================================
+
     function gaugeSVG(value) {
         value = Math.max(0, Math.min(1, value));
         var cx = 90, cy = 85, r = 70;
@@ -480,16 +558,28 @@
         return 'Strong Sell';
     }
 
-    /* ============================================================
-       INTERPRETATION
-       ============================================================ */
+    // ================================================================
+    // Interpretation (Java backend)
+    // ================================================================
+
     async function loadInterpretation() {
         try {
             var res = await fetch('/api/interpret/' + encodeURIComponent(currentSymbol));
+
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'Interpretation failed (HTTP ' + res.status + ')';
+                console.error('[loadInterpretation]', msg);
+                resolveLoading('insightsLoading', 'insightList', msg);
+                return;
+            }
+
             var data = await res.json();
             var list = document.getElementById('insightList');
             var loading = document.getElementById('insightsLoading');
             if (!list || !loading) return;
+
             if (data.insights && data.insights.length > 0) {
                 list.innerHTML = data.insights.map(function(item) {
                     return '<div class="insight-item">' + esc(item) + '</div>';
@@ -497,26 +587,38 @@
                 loading.classList.add('hidden');
                 list.classList.remove('hidden');
             } else {
-                loading.innerHTML = '<span class="muted">No analysis available</span>';
+                loading.innerHTML = '<span class="muted">No analysis insights available for ' + esc(currentSymbol) + '</span>';
             }
         } catch(e) {
-            resolveLoading('insightsLoading', 'insightList', 'Failed to load analysis');
+            console.error('[loadInterpretation] network error:', e);
+            resolveLoading('insightsLoading', 'insightList', 'Failed to load analysis: ' + (e.message || 'Network error'));
         }
     }
 
-    /* ============================================================
-       NEWS
-       ============================================================ */
+    // ================================================================
+    // News
+    // ================================================================
+
     async function loadNews() {
         try {
             var res = await fetch('/api/news/' + encodeURIComponent(currentSymbol));
+
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'News fetch failed (HTTP ' + res.status + ')';
+                console.error('[loadNews]', msg);
+                resolveLoading('newsLoading', 'newsList', msg);
+                return;
+            }
+
             var data = await res.json();
             var list = document.getElementById('newsList');
             var loading = document.getElementById('newsLoading');
             if (!list || !loading) return;
+
             if (data.articles && data.articles.length > 0) {
                 list.innerHTML = data.articles.map(function(a) {
-                    // Only allow https URLs for thumbnails and links (prevent javascript: XSS)
                     var safeThumb = (a.thumbnail && /^https:\/\//.test(a.thumbnail)) ? a.thumbnail : '';
                     var safeLink = (a.link && /^https?:\/\//.test(a.link)) ? a.link : '#';
                     var thumb = safeThumb ? '<img class="news-thumb" src="' + esc(safeThumb) + '" alt="">' : '';
@@ -530,21 +632,38 @@
                 loading.classList.add('hidden');
                 list.classList.remove('hidden');
             } else {
-                loading.innerHTML = '<span class="muted">No recent news</span>';
+                loading.innerHTML = '<span class="muted">No recent news for ' + esc(currentSymbol) + '</span>';
             }
         } catch(e) {
-            resolveLoading('newsLoading', 'newsList', 'Failed to load news');
+            console.error('[loadNews] network error:', e);
+            resolveLoading('newsLoading', 'newsList', 'Failed to load news: ' + (e.message || 'Network error'));
         }
     }
 
-    /* ============================================================
-       CHART
-       ============================================================ */
+    // ================================================================
+    // Chart
+    // ================================================================
+
     async function loadChart() {
         try {
             var res = await fetch('/api/history/' + encodeURIComponent(currentSymbol) + '?period=' + currentPeriod);
+
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'Chart data failed (HTTP ' + res.status + ')';
+                console.error('[loadChart]', msg);
+                showChartError(msg);
+                return;
+            }
+
             var data = await res.json();
-            if (data.error) return;
+            if (data.error) {
+                console.error('[loadChart]', data.error);
+                showChartError(data.error);
+                return;
+            }
+
             var targets = quoteData ? {
                 targetMean: quoteData.targetMeanPrice,
                 targetHigh: quoteData.targetHighPrice,
@@ -554,12 +673,23 @@
                 ChartRenderer.renderPriceChart('priceChart', data, currentPeriod, targets);
                 ChartRenderer.renderVolumeChart('volumeChart', data, currentPeriod);
             }
-        } catch(e) { /* chart stays empty */ }
+        } catch(e) {
+            console.error('[loadChart] network error:', e);
+            showChartError('Chart data unavailable: ' + (e.message || 'Network error'));
+        }
     }
 
-    /* ============================================================
-       HELPERS
-       ============================================================ */
+    function showChartError(msg) {
+        var el = document.getElementById('priceChart');
+        if (el && el.parentNode) {
+            el.parentNode.innerHTML = '<div class="muted" style="text-align:center;padding:2rem">' + esc(msg) + '</div>';
+        }
+    }
+
+    // ================================================================
+    // UI helpers
+    // ================================================================
+
     function showContent() {
         var ls = document.getElementById('loadingState');
         var sc = document.getElementById('stockContent');
@@ -567,12 +697,21 @@
         if (sc) sc.classList.remove('hidden');
     }
 
-    function showError(msg) {
+    /**
+     * Show the error state with a heading and descriptive message.
+     * @param {string} msg - The primary error message
+     * @param {string} [suggestion] - Optional suggestion for the user
+     */
+    function showError(msg, suggestion) {
         var ls = document.getElementById('loadingState');
         var es = document.getElementById('errorState');
         var em = document.getElementById('errorMessage');
+        var eh = document.getElementById('errorHeading');
+        var eSug = document.getElementById('errorSuggestion');
         if (ls) ls.classList.add('hidden');
+        if (eh) eh.textContent = suggestion ? 'Something Went Wrong' : 'Stock Not Found';
         if (em) em.textContent = msg;
+        if (eSug) eSug.textContent = suggestion || '';
         if (es) es.classList.remove('hidden');
     }
 
