@@ -18,12 +18,24 @@ function startServer() {
     const serverPath = getServerPath();
     console.log('Starting C++ backend:', serverPath);
 
+    // Build a clean environment for the C++ backend.
+    // Remove Python virtual-env / conda variables that would be inherited
+    // from the user's shell — they cause numpy to fail with "you should
+    // not try to import numpy from its source directory" when the venv
+    // points at a framework or MacPorts Python installation.
+    const cleanEnv = { ...process.env };
+    const poisonKeys = [
+        'VIRTUAL_ENV', 'CONDA_PREFIX', 'CONDA_DEFAULT_ENV', 'CONDA_SHLVL',
+        'PYTHONHOME', 'PYTHONPATH', '__PYVENV_LAUNCHER__',
+    ];
+    for (const key of poisonKeys) {
+        delete cleanEnv[key];
+    }
+    cleanEnv.PATH = `${process.env.HOME}/.local/jdk/bin:${process.env.HOME}/.local/bin:${cleanEnv.PATH}`;
+
     serverProcess = spawn(serverPath, ['--headless'], {
         cwd: path.join(__dirname, '..', '..', 'build'),
-        env: {
-            ...process.env,
-            PATH: `${process.env.HOME}/.local/jdk/bin:${process.env.HOME}/.local/bin:${process.env.PATH}`
-        },
+        env: cleanEnv,
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
