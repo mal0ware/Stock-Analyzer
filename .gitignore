@@ -2,6 +2,8 @@
 build/
 dist/
 cmake-build-*/
+.packaging-stage/
+.cache/
 
 # Compiled Object files
 *.slo
@@ -44,6 +46,8 @@ cmake-build-*/
 # Node / Electron
 node_modules/
 package-lock.json
+src/electron/bundled/
+src/electron/build-resources/
 
 # Python
 __pycache__/

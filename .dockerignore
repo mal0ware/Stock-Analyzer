@@ -1,0 +1,13 @@
+dist/
+build/
+.cache/
+.git/
+node_modules/
+src/electron/node_modules/
+src/electron/bundled/
+src/cpp/
+src/java/
+lib/
+*.dmg
+*.app
+.packaging-stage/

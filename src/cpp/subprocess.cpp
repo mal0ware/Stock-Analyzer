@@ -265,9 +265,13 @@ std::string run(const std::string& executable, const std::vector<std::string>& a
 // ================================================================
 static std::string findExecutable(const std::string& name) {
     std::string home = getenv("HOME") ? getenv("HOME") : "";
+    std::string base = getBasePath();
     std::vector<std::string> candidates;
 
     if (name == "java") {
+        // Bundled JRE first (inside .app bundle or alongside the binary)
+        candidates.push_back(base + "/jre/bin/java");
+        candidates.push_back(base + "/jre/Contents/Home/bin/java");
         if (!home.empty()) {
             candidates.push_back(home + "/.local/jdk/bin/java");
             candidates.push_back(home + "/.sdkman/candidates/java/current/bin/java");
@@ -277,7 +281,9 @@ static std::string findExecutable(const std::string& name) {
         candidates.push_back("/usr/local/bin/java");
         candidates.push_back("/usr/bin/java");
     } else if (name == "python3") {
-        // macOS Homebrew first — this is where pip packages (yfinance) get installed.
+        // Bundled Python first (inside .app bundle or alongside the binary)
+        candidates.push_back(base + "/python-env/bin/python3");
+        // macOS Homebrew — where pip packages (yfinance) get installed.
         // The system /usr/bin/python3 on macOS is Xcode's bare Python which does NOT
         // have user-installed packages, so it must be checked LAST.
         candidates.push_back("/opt/homebrew/bin/python3");
@@ -317,19 +323,22 @@ std::string runPython(const std::string& script, const std::vector<std::string>&
     }
 
 #if defined(__APPLE__) && defined(__aarch64__)
-    // On Apple Silicon, force arm64 architecture for universal Python binaries.
-    // Without this, Python may run as x86_64 if any ancestor process in the
-    // tree was x86_64 (e.g., Electron spawned from a Rosetta terminal or an
-    // x86_64 VS Code), causing arm64-only C extensions like numpy to fail
-    // with "incompatible architecture (have 'arm64', need 'x86_64')".
-    std::vector<std::string> fullArgs = {"-arm64", python, path};
-    fullArgs.insert(fullArgs.end(), args.begin(), args.end());
-    return run("/usr/bin/arch", fullArgs);
-#else
+    // On Apple Silicon, force arm64 architecture for universal system Python
+    // binaries. Without this, Python may run as x86_64 if any ancestor in the
+    // process tree was x86_64 (e.g., VS Code or Rosetta terminal), causing
+    // arm64-only C extensions like numpy to fail with "incompatible architecture".
+    // Bundled Python (inside getBasePath()) is already native arm64 and does
+    // not need the arch wrapper.
+    bool isBundled = python.rfind(getBasePath(), 0) == 0;
+    if (!isBundled) {
+        std::vector<std::string> fullArgs = {"-arm64", python, path};
+        fullArgs.insert(fullArgs.end(), args.begin(), args.end());
+        return run("/usr/bin/arch", fullArgs);
+    }
+#endif
     std::vector<std::string> fullArgs = {path};
     fullArgs.insert(fullArgs.end(), args.begin(), args.end());
     return run(python, fullArgs);
-#endif
 }
 
 // ================================================================
