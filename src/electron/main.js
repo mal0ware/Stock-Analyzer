@@ -1,28 +1,36 @@
+// Prevent ELECTRON_RUN_AS_NODE from being inherited (e.g. from VS Code terminals).
+// Must happen before requiring electron, otherwise the 'app' object is undefined.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const { app, BrowserWindow, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 
-// Use software rendering (needed for WSL2, VMs, no-GPU environments)
 app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('no-sandbox');
 
 const PORT = 8089;
 let serverProcess = null;
 let mainWindow = null;
 
-function getServerPath() {
-    return path.join(__dirname, '..', '..', 'build', 'stock_analyzer');
+// In packaged mode, resources are in Contents/Resources/backend/.
+// In dev mode, they're in ../../build/.
+function getBackendDir() {
+    if (app.isPackaged) {
+        return path.join(process.resourcesPath, 'backend');
+    }
+    return path.join(__dirname, '..', '..', 'build');
 }
 
 function startServer() {
-    const serverPath = getServerPath();
+    const backendDir = getBackendDir();
+    const serverPath = path.join(backendDir, 'stock_analyzer');
     console.log('Starting C++ backend:', serverPath);
+    console.log('Backend dir:', backendDir);
 
-    // Build a clean environment for the C++ backend.
-    // Remove Python virtual-env / conda variables that would be inherited
-    // from the user's shell — they cause numpy to fail with "you should
-    // not try to import numpy from its source directory" when the venv
-    // points at a framework or MacPorts Python installation.
+    // Build a clean environment — remove Python/conda variables that
+    // interfere with numpy imports in both bundled and system Python.
     const cleanEnv = { ...process.env };
     const poisonKeys = [
         'VIRTUAL_ENV', 'CONDA_PREFIX', 'CONDA_DEFAULT_ENV', 'CONDA_SHLVL',
@@ -31,12 +39,20 @@ function startServer() {
     for (const key of poisonKeys) {
         delete cleanEnv[key];
     }
-    cleanEnv.PATH = `${process.env.HOME}/.local/jdk/bin:${process.env.HOME}/.local/bin:${cleanEnv.PATH}`;
+
+    // Prepend bundled runtimes to PATH (packaged mode) plus user local tools
+    const extraPaths = [
+        path.join(backendDir, 'python-env', 'bin'),
+        path.join(backendDir, 'jre', 'bin'),
+        `${process.env.HOME}/.local/jdk/bin`,
+        `${process.env.HOME}/.local/bin`,
+    ];
+    cleanEnv.PATH = extraPaths.join(':') + ':' + (cleanEnv.PATH || '');
 
     serverProcess = spawn(serverPath, ['--headless'], {
-        cwd: path.join(__dirname, '..', '..', 'build'),
+        cwd: backendDir,
         env: cleanEnv,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     serverProcess.stdout.on('data', (data) => {
@@ -115,7 +131,6 @@ function createWindow() {
         show: true,
     });
 
-    // Force window visible and focused
     mainWindow.show();
     mainWindow.focus();
     mainWindow.moveTop();
@@ -124,7 +139,6 @@ function createWindow() {
 
     mainWindow.webContents.on('did-finish-load', () => {
         console.log('Page loaded successfully');
-        // Re-force visibility after page loads
         mainWindow.show();
         mainWindow.focus();
     });
