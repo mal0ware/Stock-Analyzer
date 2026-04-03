@@ -31,11 +31,25 @@
   </a>
 </p>
 
-1. Click the button above to download the `.dmg`
-2. Open it and drag **Stock Analyzer** to **Applications**
-3. First launch: right-click the app > **Open** > click **Open** in the dialog
+1. Click the button above to download the latest `.dmg`
+2. Open the `.dmg` and drag **Stock Analyzer** into **Applications**
+3. First launch: right-click the app > **Open** > click **Open** in the Gatekeeper dialog
 
 > The app is not yet code-signed. macOS Gatekeeper will block double-click on first launch. Right-click > Open bypasses this once.
+
+#### Updating to a New Version
+
+When a new version is released, the download button above always points to the latest release. To update:
+
+1. Download the new `.dmg` using the button above
+2. Open it and drag **Stock Analyzer** to **Applications**
+3. Click **Replace** when prompted — your old version will be overwritten with the new one
+
+There is no auto-updater. You must download and reinstall the `.dmg` each time a new version is released.
+
+### Linux / WSL2
+
+There is no prebuilt download for Linux yet. See [Build from Source](#development) below.
 
 ### Build from Source
 
@@ -228,6 +242,139 @@ This application follows [OWASP](https://owasp.org/www-project-top-ten/) best pr
 | **CORS Restriction** | Locked to `localhost:8089` — no wildcard origins |
 | **URL Validation** | External links restricted to `https://` only |
 | **No Secrets** | Zero API keys, tokens, or credentials in the codebase |
+
+---
+
+## Contributing
+
+Contributions are welcome! Here's how to get started.
+
+> **All commands below work on macOS, Linux, and WSL2.**
+
+### 1. Fork & Clone
+
+```bash
+# Fork the repo on GitHub (click the "Fork" button), then:
+git clone https://github.com/<your-username>/Stock-Analyzer.git
+cd Stock-Analyzer
+```
+
+### 2. Create a Branch
+
+Always work on a new branch — never commit directly to `main`.
+
+```bash
+# Create and switch to a new branch
+git checkout -b feature/your-feature-name
+```
+
+#### Branch Naming Conventions
+
+| Prefix | Use for | Example |
+|--------|---------|---------|
+| `feature/` | New functionality | `feature/watchlist-page` |
+| `fix/` | Bug fixes | `fix/rsi-calculation-error` |
+| `docs/` | Documentation changes | `docs/add-api-examples` |
+| `refactor/` | Code cleanup (no behavior change) | `refactor/split-analysis-module` |
+
+### 3. Make & Test Your Changes
+
+```bash
+# Run the app locally to test
+bash scripts/setup.sh        # First time only — installs dependencies
+bash scripts/run.sh           # Launch the desktop app
+
+# Verify the C++ backend compiles cleanly
+make clean && make
+```
+
+### 4. Commit Your Changes
+
+```bash
+# See what you changed
+git status
+git diff
+
+# Stage specific files (don't use "git add .")
+git add src/frontend/js/app.js src/frontend/css/styles.css
+
+# Commit with a clear message
+git commit -m "Add volume overlay toggle to chart view"
+```
+
+### 5. Push & Open a Pull Request
+
+```bash
+# Push your branch to your fork
+git push origin feature/your-feature-name
+```
+
+Then on GitHub:
+
+1. Go to the [original repo](https://github.com/mal0ware/Stock-Analyzer)
+2. Click **"Compare & pull request"** (appears automatically after a push)
+3. Set the base branch to `main`
+4. Write a short description of what your PR does and why
+5. Click **"Create pull request"**
+
+### Guidelines
+
+- Keep PRs focused — one feature or fix per PR
+- Test your changes locally before pushing
+- Make sure the C++ backend compiles cleanly (`make clean && make`)
+- Follow the existing code style
+
+---
+
+## Releasing a New Version
+
+> **For maintainers only.** This section explains how to package and publish a new release.
+
+### Step 1: Build the Installer
+
+<details>
+<summary><strong>macOS (Apple Silicon)</strong></summary>
+
+```bash
+bash scripts/package-macos.sh
+```
+
+This produces a `.dmg` in the `dist/` folder. The build takes a few minutes — it bundles Python, Java, the C++ backend, and Electron into a single installer.
+
+</details>
+
+<details>
+<summary><strong>Linux / WSL2</strong></summary>
+
+```bash
+bash scripts/package.sh
+```
+
+This produces a standalone app directory in `dist/`.
+
+</details>
+
+### Step 2: Create a GitHub Release
+
+Make sure you have the [GitHub CLI](https://cli.github.com/) installed and authenticated (`gh auth login`).
+
+```bash
+# Copy the DMG with the release-friendly name
+cp "dist/Stock Analyzer-<version>-arm64.dmg" dist/StockAnalyzer-macOS-arm64.dmg
+
+# Create the release (replace version number)
+gh release create v1.x.x \
+  --title "Stock Analyzer v1.x.x" \
+  --notes "Description of what changed in this release" \
+  ./dist/StockAnalyzer-macOS-arm64.dmg
+```
+
+> **Important:** The asset must be named `StockAnalyzer-macOS-arm64.dmg` so the download button in this README works. The `/releases/latest/download/` URL always points to the newest release automatically — no README changes needed.
+
+### Step 3: Verify
+
+1. Check the release page: `https://github.com/mal0ware/Stock-Analyzer/releases/latest`
+2. Click the download badge at the top of this README and confirm it downloads the new version
 
 ---
 
