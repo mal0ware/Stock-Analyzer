@@ -25,10 +25,15 @@
 
 ### macOS (Apple Silicon)
 
-1. Download **StockAnalyzer-macOS-arm64.dmg** from [Releases](../../releases)
-2. Open the `.dmg` and drag **StockAnalyzer** to **Applications**
+<p>
+  <a href="https://github.com/mal0ware/Stock-Analyzer/releases/latest/download/StockAnalyzer-macOS-arm64.dmg">
+    <img src="https://img.shields.io/badge/Download-macOS%20DMG-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS DMG">
+  </a>
+</p>
+
+1. Click the button above to download the `.dmg`
+2. Open it and drag **Stock Analyzer** to **Applications**
 3. First launch: right-click the app > **Open** > click **Open** in the dialog
-4. Subsequent launches work normally from Launchpad or Spotlight
 
 > The app is not yet code-signed. macOS Gatekeeper will block double-click on first launch. Right-click > Open bypasses this once.
 
