@@ -7,6 +7,43 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Colors
+GREEN=$'\033[0;32m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+NC=$'\033[0m'
+
+# Progress bar — fills while a background command runs
+BAR_WIDTH=30
+draw_bar() {
+    local msg="$1" pct=$2
+    local filled=$((pct * BAR_WIDTH / 100))
+    local empty=$((BAR_WIDTH - filled))
+    local bar_f="" bar_e=""
+    for ((j=0; j<filled; j++)); do bar_f+="█"; done
+    for ((j=0; j<empty;  j++)); do bar_e+="░"; done
+    printf "\r  %-28s ${GREEN}%s${DIM}%s${NC} %3d%%" "$msg" "$bar_f" "$bar_e" "$pct"
+}
+
+progress() {
+    local msg="$1"; shift
+    "$@" &>/dev/null &
+    local pid=$! pct=0
+    while kill -0 "$pid" 2>/dev/null; do
+        local incr=$(( (92 - pct) / 12 ))
+        [ $incr -lt 1 ] && incr=1
+        pct=$(( pct + incr ))
+        [ $pct -gt 92 ] && pct=92
+        draw_bar "$msg" $pct
+        sleep 0.12
+    done
+    wait "$pid"
+    local rc=$?
+    draw_bar "$msg" 100
+    echo ""
+    return $rc
+}
+
 # Ensure local tools are on PATH
 export PATH="$HOME/.local/node/bin:$HOME/.local/jdk/bin:$HOME/.local/bin:$PATH"
 
@@ -93,21 +130,23 @@ if $IS_WSL; then
     ./stock_analyzer --headless &>/dev/null &
     BACKEND_PID=$!
 
-    # Wait up to 10 seconds for backend to be ready
-    for i in $(seq 1 40); do
-        if (echo > /dev/tcp/localhost/8089) 2>/dev/null; then
-            break
-        fi
-        if ! kill -0 $BACKEND_PID 2>/dev/null; then
-            echo "Backend crashed on startup. Check your build."
-            exit 1
-        fi
-        sleep 0.25
-    done
+    # Wait for backend with progress bar
+    progress "Starting backend..." bash -c '
+        for i in $(seq 1 40); do
+            (echo > /dev/tcp/localhost/8089) 2>/dev/null && exit 0
+            sleep 0.25
+        done
+        exit 1
+    '
+
+    if ! kill -0 $BACKEND_PID 2>/dev/null; then
+        echo "Backend crashed on startup. Check your build."
+        exit 1
+    fi
 
     launch_windows_window "http://localhost:8089"
-    echo "Stock Analyzer is running at http://localhost:8089"
-    echo "Press Ctrl+C to stop."
+    echo "  ${GREEN}✓${NC} Running at ${BOLD}http://localhost:8089${NC}"
+    echo "  Press Ctrl+C to stop."
 
     # Shut down backend when the script exits
     cleanup() {
@@ -138,29 +177,28 @@ elif [ -d "$PROJECT_DIR/src/electron/node_modules/electron/dist/Electron.app" ];
 fi
 
 if [ -n "$ELECTRON_BIN" ]; then
-    echo "Starting Stock Analyzer..."
+    echo "  ${GREEN}✓${NC} Launching Stock Analyzer..."
     cd "$PROJECT_DIR/src/electron"
     exec "$ELECTRON_BIN" . --no-sandbox 2>/dev/null
 else
     if command -v npm &> /dev/null; then
-        echo "Installing Electron (first run)..."
         cd "$PROJECT_DIR/src/electron"
-        npm install --silent 2>/dev/null
-        echo "Starting Stock Analyzer..."
+        progress "Installing Electron (first run)..." npm install --silent
+        echo "  ${GREEN}✓${NC} Launching Stock Analyzer..."
         exec npx electron . --no-sandbox 2>/dev/null
     else
         # Fallback: headless mode with system browser
-        echo "Electron not available. Starting in browser mode..."
         cd "$PROJECT_DIR/build"
-        ./stock_analyzer --headless &
+        ./stock_analyzer --headless &>/dev/null &
         BACKEND_PID=$!
 
-        for i in $(seq 1 40); do
-            if (echo > /dev/tcp/localhost/8089) 2>/dev/null; then
-                break
-            fi
-            sleep 0.25
-        done
+        progress "Starting backend..." bash -c '
+            for i in $(seq 1 40); do
+                (echo > /dev/tcp/localhost/8089) 2>/dev/null && exit 0
+                sleep 0.25
+            done
+            exit 1
+        '
 
         # Open in default browser
         if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -169,8 +207,8 @@ else
             xdg-open "http://localhost:8089"
         fi
 
-        echo "Stock Analyzer is running at http://localhost:8089"
-        echo "Press Ctrl+C to stop."
+        echo "  ${GREEN}✓${NC} Running at ${BOLD}http://localhost:8089${NC}"
+        echo "  Press Ctrl+C to stop."
         trap "echo ''; echo 'Shutting down...'; kill $BACKEND_PID 2>/dev/null; exit 0" INT TERM
         wait $BACKEND_PID
     fi
