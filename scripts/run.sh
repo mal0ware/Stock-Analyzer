@@ -87,18 +87,15 @@ launch_windows_window() {
 # ---- WSL mode: backend in WSL, window on Windows ----
 if $IS_WSL; then
     echo "WSL detected — launching Stock Analyzer as a Windows application."
-    echo ""
 
-    # Start C++ backend
+    # Start C++ backend (suppress its output — script handles messaging)
     cd "$PROJECT_DIR/build"
-    ./stock_analyzer --headless &
+    ./stock_analyzer --headless &>/dev/null &
     BACKEND_PID=$!
 
     # Wait up to 10 seconds for backend to be ready
-    echo "Starting backend..."
     for i in $(seq 1 40); do
         if (echo > /dev/tcp/localhost/8089) 2>/dev/null; then
-            echo "Backend ready."
             break
         fi
         if ! kill -0 $BACKEND_PID 2>/dev/null; then
@@ -108,15 +105,11 @@ if $IS_WSL; then
         sleep 0.25
     done
 
-    echo "Opening application window..."
     launch_windows_window "http://localhost:8089"
-
-    echo ""
     echo "Stock Analyzer is running at http://localhost:8089"
-    echo "Close the window or press Ctrl+C to stop."
-    echo ""
+    echo "Press Ctrl+C to stop."
 
-    # Shut down backend when the script exits (window closed or Ctrl+C)
+    # Shut down backend when the script exits
     cleanup() {
         echo ""
         echo "Shutting down..."
@@ -126,23 +119,10 @@ if $IS_WSL; then
     }
     trap cleanup INT TERM
 
-    # Wait for the browser window to close, then stop the backend
-    if [ -n "$BROWSER_PID" ]; then
-        # Poll until the browser process exits
-        while kill -0 $BROWSER_PID 2>/dev/null; do
-            # Also check backend is still alive
-            if ! kill -0 $BACKEND_PID 2>/dev/null; then
-                echo "Backend stopped unexpectedly."
-                exit 1
-            fi
-            sleep 1
-        done
-        echo "Window closed."
-        cleanup
-    else
-        # No browser PID — fall back to waiting for backend
-        wait $BACKEND_PID
-    fi
+    # On WSL, browser PIDs are interop shims that exit immediately —
+    # tracking them would kill the backend while the window is still open.
+    # Instead, keep the backend alive until the user presses Ctrl+C.
+    wait $BACKEND_PID
     exit 0
 fi
 
