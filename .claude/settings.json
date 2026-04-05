@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m pip install --user --break-system-packages scikit-learn nltk)",
+      "Bash(rm -rf /home/mal0/projects/Stock-Analyzer/venv)",
+      "Bash(/usr/bin/python3 -m pip install --user --break-system-packages scikit-learn nltk)",
+      "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
+      "Bash(/usr/bin/python3 -m pytest tests/ -v)"
+    ]
+  }
+}

@@ -1,11 +1,10 @@
 """
-Stock Analyzer — FastAPI Backend
+Stock Analyzer — FastAPI Backend (v2: AI Market Analyst)
 
-Replaces the C++ server, Python subprocesses, and Java classes
-with a single Python service. Designed to run in Docker and deploy
-to any cloud platform (Railway, Fly.io, AWS, etc.).
+Evolves v1 endpoints with ML intelligence layer, multi-source data ingestion,
+WebSocket streaming, SQLite persistence, and watchlist management.
 
-Endpoints:
+v1 Endpoints (preserved):
     GET /api/health          — Health check
     GET /api/search?q=       — Search tickers
     GET /api/quote/{symbol}  — Current quote + fundamentals
@@ -14,14 +13,25 @@ Endpoints:
     GET /api/interpret/{symbol} — Plain-English insights
     GET /api/news/{symbol}   — Recent news articles
     GET /api/glossary        — Educational glossary
+
+v2 Endpoints (new):
+    GET  /api/v1/symbols/{symbol}/snapshot  — Price + ML signals + sentiment
+    GET  /api/v1/symbols/{symbol}/history   — OHLCV with structured data format
+    GET  /api/v1/symbols/{symbol}/sentiment — Sentiment timeline (news + social)
+    GET  /api/v1/anomalies                  — Recent anomaly detections
+    GET  /api/v1/market/overview            — Sector heatmap + top movers
+    GET  /api/v1/watchlist                  — User watchlist
+    POST /api/v1/watchlist                  — Add/remove watchlist symbols
+    WS   /ws/stream/{symbol}               — Real-time price push
 """
 
 import os
 import re
+import sys
 import time
 import warnings
 from collections import defaultdict
-from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,51 +41,55 @@ from fastapi.staticfiles import StaticFiles
 warnings.filterwarnings("ignore")
 os.environ["PYTHONWARNINGS"] = "ignore"
 
+# Ensure api/ is on the path for sibling imports
+sys.path.insert(0, os.path.dirname(__file__))
+
 import yfinance as yf
 
 from analysis import compute_all
 from interpreter import generate_insights
 from glossary import get_all_terms, get_term
+from config import CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW, CACHE_TTLS
+from cache import cache
+from validation import validate_symbol as _validate_symbol, validate_period as _validate_period
+
+
+# ---------------------------------------------------------------------------
+# Database initialization on startup
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from db.session import init_db
+    init_db()
+    yield
+
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Stock Analyzer API", version="2.0.0")
-
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8089").split(",")
+app = FastAPI(
+    title="AI Market Analyst API",
+    version="2.0.0",
+    description="Multi-signal market intelligence — price, ML signals, sentiment, anomalies.",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET"],
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# In-memory cache (production: use Redis)
-# ---------------------------------------------------------------------------
-
-_cache: dict[str, tuple[float, object]] = {}
-
-def cached(key: str, ttl: int):
-    """Return cached value if fresh, else None."""
-    if key in _cache:
-        ts, val = _cache[key]
-        if time.time() - ts < ttl:
-            return val
-    return None
-
-def cache_set(key: str, val: object):
-    _cache[key] = (time.time(), val)
 
 # ---------------------------------------------------------------------------
-# Rate limiter (60 req/min per IP)
+# Rate limiter (60 req/min per IP — carried from v1)
 # ---------------------------------------------------------------------------
 
 _rate: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT = int(os.getenv("RATE_LIMIT", "60"))
-RATE_WINDOW = 60
+
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
@@ -92,12 +106,14 @@ async def rate_limit(request: Request, call_next):
     response = await call_next(request)
     return response
 
+
 # ---------------------------------------------------------------------------
-# Validation
+# v1 validation helpers (kept for v1 endpoint compatibility)
 # ---------------------------------------------------------------------------
 
 VALID_SYMBOL = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 VALID_PERIODS = {"1d", "5d", "1mo", "6mo", "1y", "5y"}
+
 
 def validate_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
@@ -105,24 +121,26 @@ def validate_symbol(symbol: str) -> str:
         raise HTTPException(400, f"Invalid ticker symbol: '{symbol}'")
     return s
 
+
 def validate_period(period: str) -> str:
     if period not in VALID_PERIODS:
         raise HTTPException(400, f"Invalid period: '{period}'. Allowed: {', '.join(sorted(VALID_PERIODS))}")
     return period
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# v1 ENDPOINTS (preserved — same behavior as before)
+# ===========================================================================
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/api/search")
 def search(q: str = Query(..., max_length=100)):
     key = f"search:{q}"
-    hit = cached(key, 300)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
@@ -153,7 +171,7 @@ def search(q: str = Query(..., max_length=100)):
     except Exception as e:
         out = {"results": [], "error": str(e)}
 
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["search"])
     return out
 
 
@@ -161,7 +179,7 @@ def search(q: str = Query(..., max_length=100)):
 def quote(symbol: str):
     sym = validate_symbol(symbol)
     key = f"quote:{sym}"
-    hit = cached(key, 30)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
@@ -171,7 +189,6 @@ def quote(symbol: str):
         price = (info.get("regularMarketPrice") or info.get("currentPrice")) if info else None
 
         if not info or not price:
-            # Try fast_info fallback
             try:
                 fi = ticker.fast_info
                 if fi and hasattr(fi, "last_price") and fi.last_price:
@@ -184,14 +201,14 @@ def quote(symbol: str):
                         "volume": int(fi.last_volume) if hasattr(fi, "last_volume") and fi.last_volume else None,
                         "change": None, "changePercent": None,
                     }
-                    cache_set(key, out)
+                    cache.set(key, out, CACHE_TTLS["quote"])
                     return out
             except Exception:
                 pass
             raise HTTPException(404, f"No data found for ticker '{sym}'")
 
         out = _build_quote(info, sym, price)
-        cache_set(key, out)
+        cache.set(key, out, CACHE_TTLS["quote"])
         return out
     except HTTPException:
         raise
@@ -271,7 +288,7 @@ def history(symbol: str, period: str = "1mo"):
     period = validate_period(period)
     ttl = 60 if period in ("1d", "5d") else 300
     key = f"history:{sym}:{period}"
-    hit = cached(key, ttl)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
@@ -302,7 +319,7 @@ def history(symbol: str, period: str = "1mo"):
             "closes": closes,
             "volumes": volumes,
         }
-        cache_set(key, out)
+        cache.set(key, out, ttl)
         return out
     except HTTPException:
         raise
@@ -315,17 +332,16 @@ def analysis(symbol: str, period: str = "1y"):
     sym = validate_symbol(symbol)
     period = validate_period(period)
     key = f"analysis:{sym}:{period}"
-    hit = cached(key, 120)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
-    # Fetch history first, then compute indicators
     hist = history(sym, period)
     if "error" in hist:
         return hist
 
     out = compute_all(hist)
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["analysis"])
     return out
 
 
@@ -333,7 +349,7 @@ def analysis(symbol: str, period: str = "1y"):
 def interpret(symbol: str):
     sym = validate_symbol(symbol)
     key = f"interpret:{sym}"
-    hit = cached(key, 60)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
@@ -342,7 +358,7 @@ def interpret(symbol: str):
         return {"insights": ["Unable to generate analysis at this time."]}
 
     out = {"insights": generate_insights(quote_data)}
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["interpret"])
     return out
 
 
@@ -350,7 +366,7 @@ def interpret(symbol: str):
 def news(symbol: str):
     sym = validate_symbol(symbol)
     key = f"news:{sym}"
-    hit = cached(key, 300)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
@@ -360,7 +376,6 @@ def news(symbol: str):
         articles = []
         for item in raw_news[:8]:
             content = item.get("content", {}) if isinstance(item, dict) else {}
-            # yfinance 1.x uses nested content structure
             if content:
                 thumb = ""
                 thumbnail = content.get("thumbnail")
@@ -376,7 +391,6 @@ def news(symbol: str):
                     "thumbnail": thumb,
                 })
             else:
-                # Fallback for older yfinance format
                 articles.append({
                     "title": item.get("title", ""),
                     "publisher": item.get("publisher", ""),
@@ -388,20 +402,41 @@ def news(symbol: str):
     except Exception:
         out = {"articles": [], "symbol": sym}
 
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["news"])
     return out
 
 
 @app.get("/api/glossary")
 def glossary():
     key = "glossary"
-    hit = cached(key, 3600)
+    hit = cache.get(key)
     if hit is not None:
         return hit
 
     out = {"terms": get_all_terms()}
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["glossary"])
     return out
+
+
+# ===========================================================================
+# v2 ROUTES (mounted from route modules)
+# ===========================================================================
+
+from routes.snapshot import router as snapshot_router
+from routes.history import router as history_v2_router
+from routes.sentiment import router as sentiment_router
+from routes.anomalies import router as anomalies_router
+from routes.market import router as market_router
+from routes.watchlist import router as watchlist_router
+from routes.websocket import router as websocket_router
+
+app.include_router(snapshot_router)
+app.include_router(history_v2_router)
+app.include_router(sentiment_router)
+app.include_router(anomalies_router)
+app.include_router(market_router)
+app.include_router(watchlist_router)
+app.include_router(websocket_router)
 
 
 # ---------------------------------------------------------------------------

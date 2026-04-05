@@ -58,6 +58,15 @@ __pycache__/
 venv/
 .venv/
 
+# SQLite databases
+*.db
+
+# Trained ML models (binary artifacts)
+ml/models/
+
+# pytest
+.pytest_cache/
+
 # IDE
 .vscode/
 .idea/
