@@ -454,6 +454,12 @@ app.include_router(websocket_router)
 # Serve frontend static files (for local/Docker use)
 # ---------------------------------------------------------------------------
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "frontend")
-if os.path.isdir(FRONTEND_DIR):
+# Prefer v2 React build, then Docker path, then fall back to v1
+_candidates = [
+    os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"),  # local build
+    os.path.join(os.path.dirname(__file__), "..", "frontend-dist"),     # Docker build
+    os.path.join(os.path.dirname(__file__), "..", "src", "frontend"),   # v1 legacy
+]
+FRONTEND_DIR = next((d for d in _candidates if os.path.isdir(d)), None)
+if FRONTEND_DIR:
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

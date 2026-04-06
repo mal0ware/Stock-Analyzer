@@ -15,7 +15,9 @@
       "Bash(/usr/bin/python3 -m pip install --user -r api/requirements.txt)",
       "Bash(/usr/bin/python3 -m pip install --break-system-packages -r api/requirements.txt)",
       "Bash(/usr/bin/python3 -m uvicorn api.main:app --reload --port 8080)",
-      "Bash(curl -s http://localhost:8080/api/health)"
+      "Bash(curl -s http://localhost:8080/api/health)",
+      "Bash(docker compose:*)",
+      "Bash(chmod +x /home/mal0/projects/Stock-Analyzer/start.sh)"
     ]
   }
 }
