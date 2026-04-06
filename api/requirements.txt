@@ -18,6 +18,9 @@ pandas>=2.0.0
 scikit-learn>=1.4.0
 nltk>=3.8.0
 
+# Logging
+structlog>=25.0.0
+
 # Optional: FinBERT (heavy, install manually for GPU-accelerated sentiment)
 # transformers>=4.36.0
 # torch>=2.1.0
