@@ -52,6 +52,12 @@ from glossary import get_all_terms, get_term
 from config import CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW, CACHE_TTLS
 from cache import cache
 from validation import validate_symbol as _validate_symbol, validate_period as _validate_period
+from logging_config import setup_logging, get_logger
+from middleware import SecurityHeadersMiddleware
+
+# Initialize structured logging
+setup_logging()
+log = get_logger("api")
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +67,11 @@ from validation import validate_symbol as _validate_symbol, validate_period as _
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from db.session import init_db
+    log.info("initializing_database")
     init_db()
+    log.info("startup_complete", version="2.0.0")
     yield
+    log.info("shutdown")
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +84,8 @@ app = FastAPI(
     description="Multi-signal market intelligence — price, ML signals, sentiment, anomalies.",
     lifespan=lifespan,
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

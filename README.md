@@ -1,59 +1,61 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="scikit-learn">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="JavaScript">
-  <img src="https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/Tauri-24C8D8?style=for-the-badge&logo=tauri&logoColor=white" alt="Tauri">
+  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++">
+  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
 </p>
 
-<h1 align="center">Stock Analyzer</h1>
+<h1 align="center">AI Market Analyst</h1>
 
 <p align="center">
-  <strong>A multi-language desktop stock analysis tool with real-time data, interactive charts, AI-generated insights, and analyst ratings.</strong>
+  <strong>A real-time market intelligence engine with ML-powered trend classification, anomaly detection, and sentiment analysis — served via REST API, WebSocket streaming, and a React dashboard.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20WSL2-blue?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/License-All%20Rights%20Reserved-red?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Data-Yahoo%20Finance-purple?style=flat-square" alt="Data Source">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Languages-5%20(Python%2C%20TS%2C%20C%2B%2B%2C%20Rust%2C%20Java)-orange?style=flat-square" alt="Languages">
+  <img src="https://img.shields.io/badge/ML%20Models-3-green?style=flat-square" alt="ML Models">
   <img src="https://img.shields.io/badge/API%20Key-Not%20Required-brightgreen?style=flat-square" alt="No API Key">
 </p>
 
 ---
 
-## Download
+## Architecture
 
-### macOS (Apple Silicon)
-
-<p>
-  <a href="https://github.com/mal0ware/Stock-Analyzer/releases/latest/download/StockAnalyzer-macOS-arm64.dmg">
-    <img src="https://img.shields.io/badge/Download-macOS%20DMG-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS DMG">
-  </a>
-</p>
-
-1. Click the button above to download the latest `.dmg`
-2. Open the `.dmg` and drag **Stock Analyzer** into **Applications**
-3. First launch: right-click the app > **Open** > click **Open** in the Gatekeeper dialog
-
-> The app is not yet code-signed. macOS Gatekeeper will block double-click on first launch. Right-click > Open bypasses this once.
-
-#### Updating to a New Version
-
-When a new version is released, the download button above always points to the latest release. To update:
-
-1. Download the new `.dmg` using the button above
-2. Open it and drag **Stock Analyzer** to **Applications**
-3. Click **Replace** when prompted — your old version will be overwritten with the new one
-
-There is no auto-updater. You must download and reinstall the `.dmg` each time a new version is released.
-
-### Linux / WSL2
-
-There is no prebuilt download for Linux yet. See [Build from Source](#development) below.
-
-### Build from Source
-
-See [Development](#development) below.
+```
++-----------------------------------------------------------+
+|                     CLIENT LAYER                          |
+|  +---------------------+  +----------------------------+ |
+|  |  Tauri Desktop App  |  |  Web Browser               | |
+|  |  (macOS/Win/Linux)  |  |  (same React UI)           | |
+|  |  +---------------+  |  |                            | |
+|  |  | React Dashboard|  |  |                            | |
+|  |  +-------+-------+  |  +-------------+--------------+ |
+|  +----------+----------+                |                 |
+|             +------------+--------------+                 |
+|                          v                                |
+|               REST API (FastAPI) + WebSocket               |
++-----------------------------------------------------------+
+|                    SERVICE LAYER                           |
+|  +--------------+  +--------------+  +-----------------+  |
+|  |  Data        |  |  ML Pipeline |  |  Sentiment      |  |
+|  |  Ingestion   |  |  (sklearn)   |  |  Engine (VADER/ |  |
+|  |  (yfinance,  |  |  Trend, Anom.|  |  FinBERT)       |  |
+|  |  AV, Finnhub)|  +--------------+  +-----------------+  |
+|  +--------------+                                         |
++-----------------------------------------------------------+
+|                     DATA LAYER                            |
+|  +-----------------------------------------------------+ |
+|  |  SQLite (local)  OR  PostgreSQL (production)         | |
+|  |  Swappable via SQLAlchemy — one config change        | |
+|  +-----------------------------------------------------+ |
++-----------------------------------------------------------+
+```
 
 ---
 
@@ -61,136 +63,85 @@ See [Development](#development) below.
 
 | Feature | Description |
 |---------|-------------|
-| **Live Stock Data** | Real-time prices, daily change, and 16 key statistics from Yahoo Finance |
-| **Interactive Charts** | Price and volume charts with 6 time ranges (1D to 5Y) and analyst forecast projections |
-| **Analyst Ratings** | Semicircle gauge showing buy/sell consensus with detailed reasoning |
-| **Technical Analysis** | RSI, MACD, SMA, trend detection, support/resistance with visual gauge |
-| **AI Overview** | Auto-generated stock summary with profit strategy recommendations |
-| **Plain-English Insights** | Java-powered explanations of what the numbers actually mean |
-| **5 Color Themes** | Dark, Light, Midnight, Ocean, Terminal with persistence across sessions |
-| **Search** | Find any stock by ticker symbol or company name with auto-suggestions |
-| **News Feed** | Recent headlines with publisher, timestamps, and thumbnails |
-| **Learn Section** | 19 stock market terms explained with categories and filters |
-
-> **No API keys. No accounts. No subscriptions. Everything runs locally.**
-
----
-
-## Architecture
-
-The app has two deployment modes:
-
-### Cloud / Docker (recommended for scaling)
-
-```
-    Browser / Any device              Cloud (Railway, Fly.io, AWS)
-    +-------------------+            +---------------------------+
-    |  Frontend          | -- HTTPS ->|  FastAPI Backend (Python)  |
-    |  HTML/CSS/JS       |            |  Stock data (yfinance)     |
-    |  Chart.js, Themes  |            |  Technical analysis        |
-    |                    |            |  Interpretation engine      |
-    +-------------------+            |  News, Glossary             |
-                                     +---------------------------+
-                                              Docker container
-```
-
-### Desktop (macOS DMG)
-
-```
-    Electron Window
-    +-------------------+
-    |  Frontend          |
-    |  HTML/CSS/JS       |-----> C++ Backend (localhost:8089)
-    +-------------------+         |-- Python (yfinance)
-                                  |-- Java (interpreter)
-                                  |-- Technical analysis (C++)
-```
-
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Cloud API** | FastAPI (Python) | Single service: data, analysis, insights, news, glossary |
-| **Desktop Backend** | C++ + Python + Java | Legacy multi-language backend for offline use |
-| **Frontend** | HTML/CSS/JS + Chart.js | 5 themes, responsive charts, search |
-| **Desktop Shell** | Electron | macOS/Linux desktop wrapper |
-| **Deployment** | Docker | One command to deploy anywhere |
+| **ML Trend Classification** | Gradient boosted trees classify price action into 5 trend categories with confidence scores |
+| **Anomaly Detection** | Isolation Forest flags unusual price/volume activity in real time |
+| **Sentiment Analysis** | VADER with 30+ financial terms (FinBERT upgrade path) scores news and social media |
+| **Real-Time Streaming** | WebSocket push for live price updates on symbol detail page |
+| **Sector Heatmap** | 11-sector overview via ETF proxies with top gainers/losers |
+| **Watchlist** | Persistent watchlist with at-a-glance ML signals per symbol |
+| **Interactive Charts** | Price + volume charts with 6 time periods (Recharts) |
+| **Progressive Caching** | Endpoint-specific TTLs (15s for snapshots, 5min for history) |
+| **Multi-Source Ingestion** | Yahoo Finance (no key), Alpha Vantage, Finnhub, NewsAPI, Reddit — all optional |
+| **Offline Mode** | 80% of features work with zero API keys |
+| **Security Headers** | OWASP-mapped: CSP, X-Frame-Options, rate limiting, strict input validation |
+| **Structured Logging** | JSON-formatted logs via structlog for production observability |
 
 ---
 
-## API
+## Quick Start
 
-The backend runs on `localhost:8089`:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/search?q=apple` | Search tickers by name or symbol |
-| `GET` | `/api/quote/:symbol` | Current price, stats, company info |
-| `GET` | `/api/history/:symbol?period=1mo` | Historical OHLCV data |
-| `GET` | `/api/analysis/:symbol?period=1y` | Technical indicators (SMA, EMA, RSI, MACD) |
-| `GET` | `/api/interpret/:symbol` | Plain-English analysis (Java) |
-| `GET` | `/api/news/:symbol` | Recent news headlines |
-| `GET` | `/api/glossary` | Stock term definitions |
-
----
-
-## Development
-
-### Option A: Cloud/Docker (recommended)
-
-Requires only Python 3.13+ (or Docker).
+### Option A: Python + React (recommended for development)
 
 ```bash
-# Run locally with Python
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8080
+# Backend
+pip install -r api/requirements.txt
+python -m uvicorn main:app --reload --port 8080 --app-dir api
 
-# Or run with Docker
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) — the Vite dev server proxies API calls to the backend.
+
+### Option B: Docker
+
+```bash
 docker compose up --build
 ```
 
-Open [http://localhost:8080](http://localhost:8080) in your browser.
+Open [http://localhost:8080](http://localhost:8080).
 
-### Option B: Desktop (Electron + C++ backend)
-
-Requires C++ compiler, Python 3, Java 21, Node.js.
+### Train the ML Model (optional)
 
 ```bash
-bash scripts/setup.sh    # Install dependencies
-bash scripts/run.sh      # Launch desktop app
+python -m ml.train_cli
+# Trains on 25 large-cap tickers, saves to ml/models/trend_classifier.pkl
+# Without training, the trend classifier uses a rule-based fallback
 ```
 
-### Build & Package
+---
 
-```bash
-# Cloud: Docker image
-docker build -t stock-analyzer .
+## API Endpoints
 
-# Desktop: macOS DMG
-bash scripts/package-macos.sh
+### v1 Endpoints (legacy, preserved)
 
-# Desktop: Linux AppImage
-bash scripts/package.sh
+| Method | Path | Cache TTL | Description |
+|--------|------|-----------|-------------|
+| `GET` | `/api/health` | — | Health check |
+| `GET` | `/api/search?q=` | 300s | Search tickers |
+| `GET` | `/api/quote/{symbol}` | 30s | Quote + fundamentals |
+| `GET` | `/api/history/{symbol}` | 60–300s | OHLCV price history |
+| `GET` | `/api/analysis/{symbol}` | 120s | Technical indicators |
+| `GET` | `/api/interpret/{symbol}` | 60s | Plain-English insights |
+| `GET` | `/api/news/{symbol}` | 300s | News headlines |
+| `GET` | `/api/glossary` | 3600s | Educational glossary |
 
-# C++ only
-make              # Compile backend
-make java         # Compile Java classes
-make clean        # Remove artifacts
-```
+### v2 Endpoints (ML intelligence layer)
 
-### Deploy to Cloud
+| Method | Path | Cache TTL | Description |
+|--------|------|-----------|-------------|
+| `GET` | `/api/v1/symbols/{symbol}/snapshot` | 15s | Price + ML signals + sentiment |
+| `GET` | `/api/v1/symbols/{symbol}/history` | 60–300s | Structured OHLCV data |
+| `GET` | `/api/v1/symbols/{symbol}/sentiment` | 120s | Sentiment timeline |
+| `GET` | `/api/v1/anomalies` | 30s | Anomaly feed |
+| `GET` | `/api/v1/market/overview` | 60s | Sector heatmap + movers |
+| `GET` | `/api/v1/watchlist` | — | User watchlist |
+| `POST` | `/api/v1/watchlist` | — | Add/remove symbols |
+| `WS` | `/ws/stream/{symbol}` | — | Real-time price push |
 
-```bash
-# Railway (recommended — easiest)
-railway up
-
-# Fly.io
-fly launch
-fly deploy
-
-# Any Docker host
-docker compose up -d
-```
+Auto-generated docs at `/docs` (Swagger UI).
 
 ---
 
@@ -198,240 +149,137 @@ docker compose up -d
 
 ```
 Stock-Analyzer/
-├── api/                      # Cloud backend (FastAPI)
-│   ├── main.py               # FastAPI app — all endpoints
-│   ├── analysis.py           # Technical analysis (SMA, EMA, RSI, MACD)
-│   ├── interpreter.py        # Plain-English stock insights
-│   ├── glossary.py           # Educational glossary (19 terms)
-│   └── requirements.txt      # Python dependencies
+├── api/                          # FastAPI backend
+│   ├── main.py                   # App entry — v1 + v2 endpoints
+│   ├── config.py                 # Centralized config (CORS, TTLs, validation)
+│   ├── cache.py                  # In-memory TTL cache
+│   ├── validation.py             # Input validation (OWASP A03)
+│   ├── middleware.py             # Security headers middleware
+│   ├── logging_config.py         # Structured logging (structlog)
+│   ├── analysis.py               # Technical analysis engine
+│   ├── interpreter.py            # Plain-English insights
+│   ├── glossary.py               # Educational glossary
+│   ├── db/                       # SQLAlchemy ORM layer
+│   │   ├── models.py             # User, Watchlist, PriceData, Sentiment, Anomaly
+│   │   └── session.py            # DB session (SQLite ↔ PostgreSQL)
+│   ├── ingestion/                # Multi-source data ingestion
+│   │   ├── yahoo.py              # Yahoo Finance (zero API keys)
+│   │   ├── alphavantage.py       # Alpha Vantage (optional key)
+│   │   ├── finnhub.py            # Finnhub (optional key)
+│   │   ├── news.py               # NewsAPI (optional key)
+│   │   └── reddit.py             # Reddit/PRAW (optional creds)
+│   └── routes/                   # v2 API route modules
+│       ├── snapshot.py           # /symbols/{symbol}/snapshot
+│       ├── history.py            # /symbols/{symbol}/history
+│       ├── sentiment.py          # /symbols/{symbol}/sentiment
+│       ├── anomalies.py          # /anomalies
+│       ├── market.py             # /market/overview
+│       ├── watchlist.py          # /watchlist CRUD
+│       └── websocket.py          # WebSocket streaming
 │
-├── src/
-│   ├── frontend/             # UI (shared by cloud + desktop)
-│   │   ├── index.html        # Home page with search
-│   │   ├── stock.html        # Stock detail page
-│   │   ├── learn.html        # Educational glossary page
-│   │   ├── css/styles.css    # 5 themes, responsive layout
-│   │   └── js/               # Client-side logic
-│   │
-│   ├── cpp/                  # Desktop backend (C++)
-│   ├── python/               # Desktop data layer
-│   ├── java/src/analyzer/    # Desktop analysis layer
-│   └── electron/             # Desktop shell
+├── ml/                           # ML pipeline
+│   ├── features.py               # Feature engineering (RSI, MACD, BB, vol z-score)
+│   ├── trend.py                  # Trend classifier (HistGBT + rule-based fallback)
+│   ├── anomaly.py                # Anomaly detector (Isolation Forest)
+│   ├── sentiment.py              # Sentiment scorer (VADER + FinBERT path)
+│   └── train_cli.py              # CLI to train trend model
 │
-├── Dockerfile                # Cloud container
-├── docker-compose.yml        # Local Docker setup
-├── fly.toml                  # Fly.io deployment config
-├── railway.json              # Railway deployment config
-├── Makefile                  # C++ build (desktop only)
-└── scripts/                  # Build & packaging scripts
+├── frontend/                     # React dashboard (Vite + TypeScript + Tailwind)
+│   ├── src/
+│   │   ├── pages/                # Overview, SymbolDetail, Watchlist, Anomalies
+│   │   ├── components/           # Layout with search + nav
+│   │   ├── hooks/                # useWebSocket for real-time streaming
+│   │   └── lib/                  # API client + formatting utils
+│   └── src-tauri/                # Tauri desktop shell (Rust)
+│
+├── src/                          # v1 legacy code (C++, Python, Java, Vanilla JS)
+├── tests/                        # pytest suite (28 tests)
+├── Dockerfile                    # Multi-stage build (Node + Python)
+├── docker-compose.yml            # Local Docker setup
+├── fly.toml                      # Fly.io deployment
+├── railway.json                  # Railway deployment
+└── .github/workflows/            # CI/CD
+    ├── ci.yml                    # Lint + test + build on every push
+    └── build-desktop.yml         # Cross-platform Tauri builds on tag
 ```
 
 ---
 
-## Security
+## ML Models
 
-This application follows [OWASP](https://owasp.org/www-project-top-ten/) best practices:
+| Model | Algorithm | Input | Output |
+|-------|-----------|-------|--------|
+| **Trend Classifier** | HistGradientBoosting (sklearn) | RSI, MACD, Bollinger width, volume z-score, MA crossover | `strong_uptrend \| uptrend \| sideways \| downtrend \| strong_downtrend` + confidence |
+| **Anomaly Detector** | Isolation Forest (sklearn) | Price change %, volume ratio, volatility | Anomaly score (0–1) + boolean flag |
+| **Sentiment Scorer** | VADER + financial lexicon (FinBERT optional) | News headlines, Reddit posts | Score (-1 to 1) + label + confidence |
 
-| Protection | Implementation |
-|------------|---------------|
-| **Command Injection Prevention** | All subprocess calls use `fork`/`execvp` with argument arrays — no shell interpretation |
-| **Input Validation** | Strict regex whitelisting on all parameters at C++ and Python layers |
-| **Rate Limiting** | 60 requests/minute per IP with HTTP 429 and `Retry-After` headers |
-| **XSS Prevention** | All user-facing data escaped; DOM methods used instead of innerHTML |
-| **Security Headers** | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy |
-| **CORS Restriction** | Locked to `localhost:8089` — no wildcard origins |
-| **URL Validation** | External links restricted to `https://` only |
-| **No Secrets** | Zero API keys, tokens, or credentials in the codebase |
+All models run locally. No cloud ML services required.
 
 ---
 
-## Contributing
+## Zero-Secrets & Offline Mode
 
-Contributions are welcome! Here's how to get started.
-
-> **All commands below work on macOS, Linux, and WSL2.**
-
-### 1. Fork & Clone
-
-```bash
-# Fork the repo on GitHub (click the "Fork" button), then:
-git clone https://github.com/<your-username>/Stock-Analyzer.git
-cd Stock-Analyzer
-```
-
-### 2. Create a Branch
-
-Always work on a new branch — never commit directly to `main`.
-
-```bash
-# Create and switch to a new branch
-git checkout -b feature/your-feature-name
-```
-
-#### Branch Naming Conventions
-
-| Prefix | Use for | Example |
-|--------|---------|---------|
-| `feature/` | New functionality | `feature/watchlist-page` |
-| `fix/` | Bug fixes | `fix/rsi-calculation-error` |
-| `docs/` | Documentation changes | `docs/add-api-examples` |
-| `refactor/` | Code cleanup (no behavior change) | `refactor/split-analysis-module` |
-
-### 3. Make & Test Your Changes
-
-```bash
-# Run the app locally to test
-bash scripts/setup.sh        # First time only — installs dependencies
-bash scripts/run.sh           # Launch the desktop app
-
-# Verify the C++ backend compiles cleanly
-make clean && make
-```
-
-### 4. Commit Your Changes
-
-```bash
-# See what you changed
-git status
-git diff
-
-# Stage specific files (don't use "git add .")
-git add src/frontend/js/app.js src/frontend/css/styles.css
-
-# Commit with a clear message
-git commit -m "Add volume overlay toggle to chart view"
-```
-
-### 5. Push & Open a Pull Request
-
-```bash
-# Push your branch to your fork
-git push origin feature/your-feature-name
-```
-
-Then on GitHub:
-
-1. Go to the [original repo](https://github.com/mal0ware/Stock-Analyzer)
-2. Click **"Compare & pull request"** (appears automatically after a push)
-3. Set the base branch to `main`
-4. Write a short description of what your PR does and why
-5. Click **"Create pull request"**
-
-### Guidelines
-
-- Keep PRs focused — one feature or fix per PR
-- Test your changes locally before pushing
-- Make sure the C++ backend compiles cleanly (`make clean && make`)
-- Follow the existing code style
+| Feature | Online (with API keys) | Offline (zero keys) |
+|---------|----------------------|-------------------|
+| Price data (yfinance) | Yes | Yes |
+| Technical indicators | Yes | Yes |
+| Trend classification | Yes | Yes |
+| Anomaly detection | Yes | Yes |
+| Sentiment (VADER) | Yes | Yes |
+| News headlines | NewsAPI/Finnhub | Graceful fallback |
+| Reddit sentiment | Reddit API | Graceful fallback |
 
 ---
 
-## Releasing a New Version
+## Security (OWASP Mapping)
 
-> **For maintainers only.** This section explains how to package and publish a new release.
-
-### Step 1: Build the Installer
-
-<details>
-<summary><strong>macOS (Apple Silicon)</strong></summary>
-
-```bash
-bash scripts/package-macos.sh
-```
-
-This produces a `.dmg` in the `dist/` folder. The build takes a few minutes — it bundles Python, Java, the C++ backend, and Electron into a single installer.
-
-</details>
-
-<details>
-<summary><strong>Linux / WSL2</strong></summary>
-
-```bash
-bash scripts/package.sh
-```
-
-This produces a standalone app directory in `dist/`.
-
-</details>
-
-### Step 2: Create a GitHub Release
-
-Make sure you have the [GitHub CLI](https://cli.github.com/) installed and authenticated (`gh auth login`).
-
-```bash
-# Copy the DMG with the release-friendly name
-cp "dist/Stock Analyzer-<version>-arm64.dmg" dist/StockAnalyzer-macOS-arm64.dmg
-
-# Create the release (replace version number)
-gh release create v1.x.x \
-  --title "Stock Analyzer v1.x.x" \
-  --notes "Description of what changed in this release" \
-  ./dist/StockAnalyzer-macOS-arm64.dmg
-```
-
-> **Important:** The asset must be named `StockAnalyzer-macOS-arm64.dmg` so the download button in this README works. The `/releases/latest/download/` URL always points to the newest release automatically — no README changes needed.
-
-### Step 3: Verify
-
-1. Check the release page: `https://github.com/mal0ware/Stock-Analyzer/releases/latest`
-2. Click the download badge at the top of this README and confirm it downloads the new version
+| OWASP Risk | Mitigation |
+|-----------|-----------|
+| **A01: Broken Access Control** | Watchlist scoped to user; JWT path for production |
+| **A03: Injection** | Strict regex validation (`^[A-Za-z0-9.\-]{1,10}$`), parameterized SQL via SQLAlchemy |
+| **A04: Insecure Design** | Per-IP rate limiting (60/min), HTTP 429 + Retry-After |
+| **A05: Misconfiguration** | CORS whitelist, security headers (CSP, X-Frame-Options, etc.) |
+| **A06: SSRF** | No user-supplied outbound URLs; data sources hardcoded |
+| **A07: XSS** | React JSX escaping, CSP headers |
+| **A09: Logging** | Structured JSON logging via structlog |
 
 ---
 
-## Troubleshooting
+## Desktop App (Tauri)
 
-<details>
-<summary><strong>macOS: "App is damaged" or Gatekeeper blocks it</strong></summary>
+The Tauri project is scaffolded in `frontend/src-tauri/`. To build desktop installers:
 
-The app is not code-signed. Right-click > **Open** on first launch, or run:
 ```bash
-xattr -cr /Applications/StockAnalyzer.app
+# Requires Rust toolchain + platform deps
+cd frontend
+npm run tauri build
 ```
 
-</details>
+| Platform | Output |
+|----------|--------|
+| macOS | `.dmg` + `.app` bundle |
+| Windows | `.msi` + `.exe` installer |
+| Linux | `.deb` + `.AppImage` |
 
-<details>
-<summary><strong>macOS: "Install Command Line Tools" popup during setup</strong></summary>
-
-Click **Install**, wait for it to finish, then run `bash scripts/setup.sh` again.
-
-</details>
-
-<details>
-<summary><strong>"python3 not found" during setup</strong></summary>
-
-Download from [python.org/downloads](https://www.python.org/downloads/) and follow the installer steps.
-
-</details>
-
-<details>
-<summary><strong>No window opens / Electron not found</strong></summary>
-
-The app falls back to browser mode. Open [http://localhost:8089](http://localhost:8089) in any browser.
-
-</details>
-
-<details>
-<summary><strong>Something else is broken</strong></summary>
-
-Re-run setup:
-```bash
-bash scripts/setup.sh
-```
-
-</details>
+CI/CD builds all three platforms via GitHub Actions on git tag push.
 
 ---
 
-## Data Source
+## Data Sources
 
-All market data comes from [Yahoo Finance](https://finance.yahoo.com) via the [yfinance](https://github.com/ranaroussi/yfinance) Python library. Free, no API key, no account required.
+| Source | API Key Required | Used For |
+|--------|-----------------|----------|
+| Yahoo Finance (yfinance) | No | Price data, OHLCV, fundamentals, news |
+| Alpha Vantage | Optional | Intraday time series, technicals |
+| Finnhub | Optional | Company news, real-time quotes |
+| NewsAPI | Optional | News headlines for sentiment |
+| Reddit (PRAW) | Optional | Social sentiment from r/wallstreetbets, r/stocks |
 
 ---
 
 ## Disclaimer
 
-> **For educational and informational purposes only.** This application does not provide financial advice. All analysis is generated from publicly available data and should not be used as the sole basis for investment decisions. Always do your own research or consult a financial advisor.
+> **This tool provides data analysis and is not financial advice.** Past performance does not indicate future results. No buy/sell/hold recommendations. Always do your own research.
 
 ---
 
