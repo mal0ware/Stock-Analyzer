@@ -5,7 +5,17 @@
       "Bash(rm -rf /home/mal0/projects/Stock-Analyzer/venv)",
       "Bash(/usr/bin/python3 -m pip install --user --break-system-packages scikit-learn nltk)",
       "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
-      "Bash(/usr/bin/python3 -m pytest tests/ -v)"
+      "Bash(/usr/bin/python3 -m pytest tests/ -v)",
+      "Bash(sudo apt:*)",
+      "Bash(python3 -c \"import fastapi, uvicorn, yfinance, structlog; print\\('All deps available'\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install -r api/requirements.txt)",
+      "Bash(rm -rf venv)",
+      "Bash(/usr/bin/python3 -m pip install -r api/requirements.txt)",
+      "Bash(/usr/bin/python3 -m pip install --user -r api/requirements.txt)",
+      "Bash(/usr/bin/python3 -m pip install --break-system-packages -r api/requirements.txt)",
+      "Bash(/usr/bin/python3 -m uvicorn api.main:app --reload --port 8080)",
+      "Bash(curl -s http://localhost:8080/api/health)"
     ]
   }
 }
