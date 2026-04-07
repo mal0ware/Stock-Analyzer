@@ -22,7 +22,7 @@ BUNDLED_DIR="$ELECTRON_DIR/bundled"
 
 export PATH="$HOME/.local/node/bin:$HOME/.local/jdk/bin:$HOME/.local/bin:$PATH"
 
-# Prevent VS Code / Claude Code terminal from poisoning child Electron processes
+# Prevent VS Code terminal from poisoning child Electron processes
 unset ELECTRON_RUN_AS_NODE 2>/dev/null || true
 
 # Bundled runtime versions
