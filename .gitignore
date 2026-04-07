@@ -5,6 +5,7 @@ cmake-build-*/
 .packaging-stage/
 .cache/
 
+
 # Compiled Object files
 *.slo
 *.lo
@@ -73,6 +74,15 @@ ml/models/
 *.swp
 *.swo
 *~
+.claude/
+
+# Tauri build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+frontend/src-tauri/gen/
+
+# PyInstaller
+build/
 
 # OS
 .DS_Store

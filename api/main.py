@@ -463,3 +463,8 @@ _candidates = [
 FRONTEND_DIR = next((d for d in _candidates if os.path.isdir(d)), None)
 if FRONTEND_DIR:
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8080")))

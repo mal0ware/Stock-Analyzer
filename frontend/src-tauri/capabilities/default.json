@@ -1,0 +1,19 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for the app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-spawn",
+    "shell:allow-execute",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/market-analyst-api",
+          "sidecar": true
+        }
+      ]
+    }
+  ]
+}
