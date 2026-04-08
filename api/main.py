@@ -1,34 +1,37 @@
 """
-Stock Analyzer — FastAPI Backend
+AI Market Analyst — FastAPI Backend
 
-Replaces the C++ server, Python subprocesses, and Java classes
-with a single Python service. Designed to run in Docker and deploy
-to any cloud platform (Railway, Fly.io, AWS, etc.).
+Single Python service replacing the v1 C++ server + subprocess architecture.
+Serves both the v1 legacy API and v2 ML intelligence endpoints, plus the
+React dashboard as static files in production/Docker.
 
-Endpoints:
-    GET /api/health          — Health check
-    GET /api/search?q=       — Search tickers
-    GET /api/quote/{symbol}  — Current quote + fundamentals
-    GET /api/history/{symbol}— OHLCV price history
-    GET /api/analysis/{symbol} — Technical indicators
-    GET /api/interpret/{symbol} — Plain-English insights
-    GET /api/news/{symbol}   — Recent news articles
-    GET /api/glossary        — Educational glossary
+v1 Endpoints (legacy):
+    GET /api/health, /api/search, /api/quote/{symbol}, /api/history/{symbol}
+    GET /api/analysis/{symbol}, /api/interpret/{symbol}, /api/news/{symbol}
+    GET /api/glossary
+
+v2 Endpoints (ML intelligence):
+    GET /api/v1/symbols/{symbol}/snapshot, /api/v1/symbols/{symbol}/history
+    GET /api/v1/symbols/{symbol}/sentiment, /api/v1/anomalies
+    GET /api/v1/market/overview, /api/v1/watchlist
+    POST /api/v1/watchlist
+    WS  /ws/stream/{symbol}
 """
 
 import asyncio
 import os
 import re
+import sys
 import time
 import warnings
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Optional
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 warnings.filterwarnings("ignore")
@@ -39,56 +42,54 @@ import yfinance as yf
 from analysis import compute_all
 from interpreter import generate_insights
 from glossary import get_all_terms, get_term
+from config import CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW, CACHE_TTLS
+from cache import cache
+from middleware import SecurityHeadersMiddleware
+from logging_config import setup_logging, get_logger
+from db.session import init_db
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Stock Analyzer API", version="2.0.0")
+setup_logging()
+log = get_logger("main")
 
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8089").split(",")
+app = FastAPI(title="AI Market Analyst", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET"],
+    allow_origins=CORS_ORIGINS + ["http://localhost:5173"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
 
-# Thread pool for running blocking yfinance calls without blocking the event loop.
-# 8 workers allows 8 concurrent stock lookups — a huge improvement over serial execution.
+# Thread pool for blocking yfinance calls
 _executor = ThreadPoolExecutor(max_workers=8)
 
 
 async def run_in_thread(fn, *args):
-    """Run a blocking function in the thread pool to avoid blocking the event loop."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, partial(fn, *args))
 
-# ---------------------------------------------------------------------------
-# In-memory cache (production: use Redis)
-# ---------------------------------------------------------------------------
-
-_cache: dict[str, tuple[float, object]] = {}
-
-def cached(key: str, ttl: int):
-    """Return cached value if fresh, else None."""
-    if key in _cache:
-        ts, val = _cache[key]
-        if time.time() - ts < ttl:
-            return val
-    return None
-
-def cache_set(key: str, val: object):
-    _cache[key] = (time.time(), val)
 
 # ---------------------------------------------------------------------------
-# Rate limiter (60 req/min per IP)
+# Database init
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def startup():
+    init_db()
+    log.info("database_initialized")
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter (per-IP, configurable)
 # ---------------------------------------------------------------------------
 
 _rate: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT = int(os.getenv("RATE_LIMIT", "60"))
-RATE_WINDOW = 60
+
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
@@ -105,12 +106,14 @@ async def rate_limit(request: Request, call_next):
     response = await call_next(request)
     return response
 
+
 # ---------------------------------------------------------------------------
-# Validation
+# Validation (v1 endpoints use inline; v2 uses validation.py)
 # ---------------------------------------------------------------------------
 
 VALID_SYMBOL = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 VALID_PERIODS = {"1d", "5d", "1mo", "6mo", "1y", "5y"}
+
 
 def validate_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
@@ -118,17 +121,18 @@ def validate_symbol(symbol: str) -> str:
         raise HTTPException(400, f"Invalid ticker symbol: '{symbol}'")
     return s
 
+
 def validate_period(period: str) -> str:
     if period not in VALID_PERIODS:
         raise HTTPException(400, f"Invalid period: '{period}'. Allowed: {', '.join(sorted(VALID_PERIODS))}")
     return period
 
+
 # ---------------------------------------------------------------------------
-# Blocking data fetch functions (run in thread pool)
+# v1 blocking data-fetch functions (run in thread pool)
 # ---------------------------------------------------------------------------
 
 def _fetch_quote_sync(sym: str) -> dict:
-    """Blocking quote fetch — runs in thread pool."""
     ticker = yf.Ticker(sym)
     info = ticker.info
     price = (info.get("regularMarketPrice") or info.get("currentPrice")) if info else None
@@ -147,19 +151,18 @@ def _fetch_quote_sync(sym: str) -> dict:
                 }
         except Exception:
             pass
-        return None  # Signal 404
+        return None
 
     return _build_quote(info, sym, price)
 
 
 def _fetch_history_sync(sym: str, period: str) -> dict:
-    """Blocking history fetch — runs in thread pool."""
     ticker = yf.Ticker(sym)
     yf_period, interval = PERIOD_MAP.get(period, ("1mo", "1d"))
     hist = ticker.history(period=yf_period, interval=interval)
 
     if hist.empty:
-        return None  # Signal 404
+        return None
 
     dates, opens, highs, lows, closes, volumes = [], [], [], [], [], []
     for idx, row in hist.iterrows():
@@ -178,7 +181,6 @@ def _fetch_history_sync(sym: str, period: str) -> dict:
 
 
 def _fetch_news_sync(sym: str) -> dict:
-    """Blocking news fetch — runs in thread pool."""
     ticker = yf.Ticker(sym)
     raw_news = ticker.news or []
     articles = []
@@ -210,7 +212,6 @@ def _fetch_news_sync(sym: str) -> dict:
 
 
 def _search_sync(q: str) -> dict:
-    """Blocking search — runs in thread pool."""
     import urllib.request
     import urllib.parse
     import json
@@ -237,27 +238,25 @@ def _search_sync(q: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Endpoints (all async — blocking work delegated to thread pool)
+# v1 Endpoints
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/api/search")
 async def search(q: str = Query(..., max_length=100)):
     key = f"search:{q}"
-    hit = cached(key, 300)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     try:
         out = await run_in_thread(_search_sync, q)
     except Exception as e:
         out = {"results": [], "error": str(e)}
-
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["search"])
     return out
 
 
@@ -265,15 +264,14 @@ async def search(q: str = Query(..., max_length=100)):
 async def quote(symbol: str):
     sym = validate_symbol(symbol)
     key = f"quote:{sym}"
-    hit = cached(key, 30)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     try:
         out = await run_in_thread(_fetch_quote_sync, sym)
         if out is None:
             raise HTTPException(404, f"No data found for ticker '{sym}'")
-        cache_set(key, out)
+        cache.set(key, out, CACHE_TTLS["quote"])
         return out
     except HTTPException:
         raise
@@ -351,17 +349,16 @@ PERIOD_MAP = {
 async def history(symbol: str, period: str = "1mo"):
     sym = validate_symbol(symbol)
     period = validate_period(period)
-    ttl = 60 if period in ("1d", "5d") else 300
+    ttl = CACHE_TTLS["history_short"] if period in ("1d", "5d") else CACHE_TTLS["history_long"]
     key = f"history:{sym}:{period}"
-    hit = cached(key, ttl)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     try:
         out = await run_in_thread(_fetch_history_sync, sym, period)
         if out is None:
             raise HTTPException(404, f"No history data for '{sym}' (period={period})")
-        cache_set(key, out)
+        cache.set(key, out, ttl)
         return out
     except HTTPException:
         raise
@@ -374,17 +371,14 @@ async def analysis(symbol: str, period: str = "1y"):
     sym = validate_symbol(symbol)
     period = validate_period(period)
     key = f"analysis:{sym}:{period}"
-    hit = cached(key, 120)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
-    # Fetch history in thread pool, then compute indicators (CPU-bound, fast)
     hist = await history(sym, period)
     if "error" in hist:
         return hist
-
     out = compute_all(hist)
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["analysis"])
     return out
 
 
@@ -392,16 +386,14 @@ async def analysis(symbol: str, period: str = "1y"):
 async def interpret(symbol: str):
     sym = validate_symbol(symbol)
     key = f"interpret:{sym}"
-    hit = cached(key, 60)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     quote_data = await quote(sym)
     if "error" in quote_data:
         return {"insights": ["Unable to generate analysis at this time."]}
-
     out = {"insights": generate_insights(quote_data)}
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["interpret"])
     return out
 
 
@@ -409,35 +401,97 @@ async def interpret(symbol: str):
 async def news(symbol: str):
     sym = validate_symbol(symbol)
     key = f"news:{sym}"
-    hit = cached(key, 300)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     try:
         out = await run_in_thread(_fetch_news_sync, sym)
     except Exception:
         out = {"articles": [], "symbol": sym}
-
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["news"])
     return out
 
 
 @app.get("/api/glossary")
 async def glossary():
     key = "glossary"
-    hit = cached(key, 3600)
+    hit = cache.get(key)
     if hit is not None:
         return hit
-
     out = {"terms": get_all_terms()}
-    cache_set(key, out)
+    cache.set(key, out, CACHE_TTLS["glossary"])
     return out
 
 
 # ---------------------------------------------------------------------------
-# Serve frontend static files (for local/Docker use)
+# v2 Endpoints (ML intelligence layer) — route modules
 # ---------------------------------------------------------------------------
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "frontend")
-if os.path.isdir(FRONTEND_DIR):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+from routes.snapshot import router as snapshot_router
+from routes.history import router as history_router
+from routes.sentiment import router as sentiment_router
+from routes.anomalies import router as anomalies_router
+from routes.market import router as market_router
+from routes.watchlist import router as watchlist_router
+from routes.websocket import router as websocket_router
+
+app.include_router(snapshot_router)
+app.include_router(history_router)
+app.include_router(sentiment_router)
+app.include_router(anomalies_router)
+app.include_router(market_router)
+app.include_router(watchlist_router)
+app.include_router(websocket_router)
+
+
+# ---------------------------------------------------------------------------
+# Serve React dashboard (production / Docker)
+# ---------------------------------------------------------------------------
+# Priority: frontend-dist/ (Docker COPY), then ../frontend/dist (local build)
+
+_api_dir = Path(__file__).resolve().parent
+_react_candidates = [
+    _api_dir / ".." / "frontend-dist",     # Docker: COPY --from=frontend-build
+    _api_dir / ".." / "frontend" / "dist",  # Local: npm run build
+]
+
+_react_dir = None
+for candidate in _react_candidates:
+    if candidate.is_dir() and (candidate / "index.html").exists():
+        _react_dir = candidate.resolve()
+        break
+
+if _react_dir:
+    # Serve static assets (JS, CSS, images) under /assets
+    _assets_dir = _react_dir / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    # Serve other static files (favicon, etc.)
+    @app.get("/favicon.svg")
+    async def favicon():
+        fav = _react_dir / "favicon.svg"
+        if fav.exists():
+            return FileResponse(str(fav), media_type="image/svg+xml")
+        raise HTTPException(404)
+
+    # SPA fallback — serve index.html for all non-API routes
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        # Don't intercept API or WebSocket routes
+        if full_path.startswith("api/") or full_path.startswith("ws/") or full_path.startswith("docs") or full_path.startswith("openapi"):
+            raise HTTPException(404)
+        # Try serving the exact file first
+        file_path = _react_dir / full_path
+        if full_path and file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        # SPA: return index.html for client-side routing
+        return FileResponse(str(_react_dir / "index.html"))
+
+    log.info("react_frontend_mounted", path=str(_react_dir))
+else:
+    # Fallback: serve v1 vanilla JS frontend
+    _v1_frontend = _api_dir / ".." / "src" / "frontend"
+    if _v1_frontend.is_dir():
+        app.mount("/", StaticFiles(directory=str(_v1_frontend), html=True), name="frontend")
+        log.info("v1_frontend_mounted", path=str(_v1_frontend))

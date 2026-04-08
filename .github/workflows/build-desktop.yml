@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -12,10 +15,13 @@ jobs:
         include:
           - platform: macos-latest
             target: aarch64-apple-darwin
+            tauri_args: "--target aarch64-apple-darwin"
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            tauri_args: ""
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            tauri_args: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -25,23 +31,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: api/requirements.txt
 
-      # Install system dependencies for Tauri on Linux
+      # Linux system deps for Tauri
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      # Build Python sidecar
+      # Build Python sidecar (self-contained binary)
       - name: Build Python sidecar
         run: |
           pip install pyinstaller
@@ -69,7 +83,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: frontend
+          tauriScript: npx tauri
+          args: ${{ matrix.tauri_args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'AI Market Analyst ${{ github.ref_name }}'
-          releaseBody: 'Download the installer for your platform below.'
-          releaseDraft: true
+          releaseBody: |
+            ## AI Market Analyst ${{ github.ref_name }}
+
+            Download the installer for your platform below.
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` |
+            | Windows | `.msi` / `.exe` |
+            | Linux | `.deb` / `.AppImage` |
+
+            ### Quick Install (no download needed)
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/mal0ware/Stock-Analyzer/main/install.sh | bash
+            ```
+          releaseDraft: false
+          prerelease: false

@@ -13,48 +13,87 @@
 <h1 align="center">AI Market Analyst</h1>
 
 <p align="center">
-  <strong>A real-time market intelligence engine with ML-powered trend classification, anomaly detection, and sentiment analysis — served via REST API, WebSocket streaming, and a React dashboard.</strong>
+  <strong>Real-time market intelligence with ML-powered trend classification, anomaly detection, and sentiment analysis.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/Languages-5%20(Python%2C%20TS%2C%20C%2B%2B%2C%20Rust%2C%20Java)-orange?style=flat-square" alt="Languages">
-  <img src="https://img.shields.io/badge/ML%20Models-3-green?style=flat-square" alt="ML Models">
+  <a href="https://github.com/mal0ware/Stock-Analyzer/releases/latest"><img src="https://img.shields.io/github/v/release/mal0ware/Stock-Analyzer?style=flat-square&color=blue" alt="Latest Release"></a>
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Docker-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/API%20Key-Not%20Required-brightgreen?style=flat-square" alt="No API Key">
 </p>
+
+---
+
+## Install
+
+### One Command (Linux / macOS / WSL)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mal0ware/Stock-Analyzer/main/install.sh | bash
+```
+
+Then launch:
+
+```bash
+~/ai-market-analyst/launch.sh
+```
+
+### Docker (any platform)
+
+```bash
+docker run -p 8080:8080 ghcr.io/mal0ware/stock-analyzer:latest
+```
+
+Or clone and build:
+
+```bash
+git clone https://github.com/mal0ware/Stock-Analyzer.git
+cd Stock-Analyzer
+docker compose up --build
+```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+### Desktop App
+
+Download the installer for your platform from the [latest release](https://github.com/mal0ware/Stock-Analyzer/releases/latest):
+
+| Platform | Download |
+|----------|----------|
+| macOS (Apple Silicon) | `.dmg` |
+| Windows | `.msi` installer |
+| Linux | `.deb` / `.AppImage` |
+
+No command line needed — double-click to install and run.
 
 ---
 
 ## Architecture
 
 ```
-+-----------------------------------------------------------+
-|                     CLIENT LAYER                          |
-|  +---------------------+  +----------------------------+ |
-|  |  Tauri Desktop App  |  |  Web Browser               | |
-|  |  (macOS/Win/Linux)  |  |  (same React UI)           | |
-|  |  +---------------+  |  |                            | |
-|  |  | React Dashboard|  |  |                            | |
-|  |  +-------+-------+  |  +-------------+--------------+ |
-|  +----------+----------+                |                 |
-|             +------------+--------------+                 |
-|                          v                                |
-|               REST API (FastAPI) + WebSocket               |
-+-----------------------------------------------------------+
-|                    SERVICE LAYER                           |
-|  +--------------+  +--------------+  +-----------------+  |
-|  |  Data        |  |  ML Pipeline |  |  Sentiment      |  |
-|  |  Ingestion   |  |  (sklearn)   |  |  Engine (VADER/ |  |
-|  |  (yfinance,  |  |  Trend, Anom.|  |  FinBERT)       |  |
-|  |  AV, Finnhub)|  +--------------+  +-----------------+  |
-|  +--------------+                                         |
-+-----------------------------------------------------------+
-|                     DATA LAYER                            |
-|  +-----------------------------------------------------+ |
-|  |  SQLite (local)  OR  PostgreSQL (production)         | |
-|  |  Swappable via SQLAlchemy — one config change        | |
-|  +-----------------------------------------------------+ |
-+-----------------------------------------------------------+
+                    ┌─────────────────────────────────┐
+                    │         CLIENT LAYER             │
+                    │  ┌───────────┐  ┌────────────┐  │
+                    │  │  Desktop  │  │  Browser    │  │
+                    │  │  (Tauri)  │  │  (React)    │  │
+                    │  └─────┬─────┘  └──────┬─────┘  │
+                    └────────┼───────────────┼────────┘
+                             └───────┬───────┘
+                                     ▼
+                    ┌─────────────────────────────────┐
+                    │  FastAPI + WebSocket (Python)    │
+                    │  Rate limiting · Security hdrs   │
+                    │  Structured logging (structlog)  │
+                    ├─────────┬──────────┬────────────┤
+                    │  Data   │  ML      │  Sentiment │
+                    │  Layer  │  Pipeline│  Engine    │
+                    │ yfinance│ sklearn  │ VADER/     │
+                    │ AV, FH  │ trend,   │ FinBERT    │
+                    │ NewsAPI │ anomaly  │            │
+                    ├─────────┴──────────┴────────────┤
+                    │  SQLite (local) / PostgreSQL     │
+                    │  SQLAlchemy ORM — one config     │
+                    └─────────────────────────────────┘
 ```
 
 ---
@@ -70,46 +109,76 @@
 | **Sector Heatmap** | 11-sector overview via ETF proxies with top gainers/losers |
 | **Watchlist** | Persistent watchlist with at-a-glance ML signals per symbol |
 | **Interactive Charts** | Price + volume charts with 6 time periods (Recharts) |
-| **Progressive Caching** | Endpoint-specific TTLs (15s for snapshots, 5min for history) |
+| **Progressive Caching** | Endpoint-specific TTLs (15s snapshots, 5min history) |
+| **Parallel Data Fetching** | Thread pool executor + asyncio for non-blocking I/O |
 | **Multi-Source Ingestion** | Yahoo Finance (no key), Alpha Vantage, Finnhub, NewsAPI, Reddit — all optional |
-| **Offline Mode** | 80% of features work with zero API keys |
+| **Offline Mode** | 80% of features work with zero API keys via yfinance |
 | **Security Headers** | OWASP-mapped: CSP, X-Frame-Options, rate limiting, strict input validation |
 | **Structured Logging** | JSON-formatted logs via structlog for production observability |
+| **Cross-Platform Desktop** | Tauri (Rust + native webview) — ~10MB installers vs Electron's ~150MB |
 
 ---
 
-## Quick Start
+## Tech Stack & Proficiency Demonstration
 
-### Option A: Python + React (recommended for development)
+### Python (FastAPI, scikit-learn, pandas, SQLAlchemy)
 
-```bash
-# Backend
-pip install -r api/requirements.txt
-python -m uvicorn main:app --reload --port 8080 --app-dir api
+The backend is a production-grade **FastAPI** service demonstrating:
 
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-```
+- **Async/concurrent architecture** — `asyncio` event loop with `ThreadPoolExecutor` for blocking I/O (yfinance), parallel data fetching across 31 tickers for the market overview endpoint
+- **ML pipeline** — Feature engineering (RSI, MACD, Bollinger Bands, volume z-scores), `HistGradientBoosting` trend classifier with rule-based fallback, `IsolationForest` anomaly detector, VADER sentiment with financial lexicon extensions
+- **ORM design** — SQLAlchemy declarative models with composite indexes, session dependency injection, SQLite/PostgreSQL swappable via single env var
+- **Security** — OWASP A01–A09 mapped: regex input validation, per-IP rate limiting with sliding window, parameterized SQL, CORS whitelist, security headers middleware
+- **Structured logging** — `structlog` with JSON/console renderers, context-aware log propagation
 
-Open [http://localhost:5173](http://localhost:5173) — the Vite dev server proxies API calls to the backend.
+### TypeScript / React
 
-### Option B: Docker
+The frontend is a **React 19** SPA with **Vite** + **Tailwind CSS v4**:
 
-```bash
-docker compose up --build
-```
+- **Component architecture** — Route-based code splitting, layout shell with search, reusable signal cards
+- **State management** — Local state with hooks (`useState`, `useEffect`, `useCallback`), `Promise.allSettled` for parallel snapshot loading on the watchlist page
+- **Real-time data** — Custom `useWebSocket` hook with auto-reconnect, live price updates on symbol detail
+- **UX patterns** — Skeleton loading screens (CSS shimmer animation), debounced search with keyboard support, responsive grid layouts, progressive data loading
+- **Type safety** — Full TypeScript with strict mode, typed API client layer, interface-first design
 
-Open [http://localhost:8080](http://localhost:8080).
+### Rust (Tauri)
 
-### Train the ML Model (optional)
+The desktop app uses **Tauri 2** to wrap the React frontend in a native window:
 
-```bash
-python -m ml.train_cli
-# Trains on 25 large-cap tickers, saves to ml/models/trend_classifier.pkl
-# Without training, the trend classifier uses a rule-based fallback
-```
+- **Sidecar pattern** — PyInstaller-bundled Python backend as an external binary, managed by Tauri's shell plugin
+- **Cross-compilation** — GitHub Actions matrix builds for macOS (arm64), Windows (x64), Linux (x64) with Rust target caching via `sccache`
+- **Security** — CSP headers in Tauri config, restricted IPC permissions
+
+### C++ (v1 Legacy)
+
+The original v1 backend was a **C++17 HTTP server** demonstrating:
+
+- **Systems programming** — Socket-level HTTP server with `<thread>`, `<mutex>`, custom request router
+- **Process management** — Subprocess pool (`fork`/`execvp`) for Python analysis workers, with `waitpid` lifecycle management
+- **Cross-compilation** — MinGW cross-compilation for Windows from Linux, with `Winsock2` abstraction layer
+- **Memory-safe caching** — TTL cache with `std::unordered_map` and mutex-guarded concurrent access
+
+### Docker
+
+Production deployment demonstrates:
+
+- **Multi-stage builds** — Node.js build stage (frontend), Python runtime stage (backend), no Node.js in final image
+- **Layer optimization** — Dependencies installed before source code COPY for maximum cache hits
+- **Health checks** — Built-in `HEALTHCHECK` instruction, `curl`-based liveness probe
+- **Compose** — Single-service compose with named volumes for persistent SQLite data
+
+### Java (v1 Legacy)
+
+The v1 interpreter module was a **Java** natural-language text generator:
+
+- **OOP design** — Strategy pattern for different analysis types, template-based sentence generation
+- **JVM interop** — Called from C++ via subprocess, JSON serialization for IPC
+
+### CI/CD (GitHub Actions)
+
+- **Matrix builds** — Parallel cross-platform desktop builds (macOS, Windows, Linux)
+- **Dependency caching** — npm, pip, Rust target, Cargo registry caches for fast iteration
+- **Automated releases** — Tag-triggered builds with `tauri-action` artifact upload to GitHub Releases
 
 ---
 
@@ -141,66 +210,31 @@ python -m ml.train_cli
 | `POST` | `/api/v1/watchlist` | — | Add/remove symbols |
 | `WS` | `/ws/stream/{symbol}` | — | Real-time price push |
 
-Auto-generated docs at `/docs` (Swagger UI).
+Swagger docs at `/docs` when the server is running.
 
 ---
 
-## Project Structure
+## Development
 
+```bash
+# Backend
+pip install -r api/requirements.txt
+python -m uvicorn main:app --reload --port 8080 --app-dir api
+
+# Frontend (separate terminal — hot reload)
+cd frontend && npm install && npm run dev
 ```
-Stock-Analyzer/
-├── api/                          # FastAPI backend
-│   ├── main.py                   # App entry — v1 + v2 endpoints
-│   ├── config.py                 # Centralized config (CORS, TTLs, validation)
-│   ├── cache.py                  # In-memory TTL cache
-│   ├── validation.py             # Input validation (OWASP A03)
-│   ├── middleware.py             # Security headers middleware
-│   ├── logging_config.py         # Structured logging (structlog)
-│   ├── analysis.py               # Technical analysis engine
-│   ├── interpreter.py            # Plain-English insights
-│   ├── glossary.py               # Educational glossary
-│   ├── db/                       # SQLAlchemy ORM layer
-│   │   ├── models.py             # User, Watchlist, PriceData, Sentiment, Anomaly
-│   │   └── session.py            # DB session (SQLite ↔ PostgreSQL)
-│   ├── ingestion/                # Multi-source data ingestion
-│   │   ├── yahoo.py              # Yahoo Finance (zero API keys)
-│   │   ├── alphavantage.py       # Alpha Vantage (optional key)
-│   │   ├── finnhub.py            # Finnhub (optional key)
-│   │   ├── news.py               # NewsAPI (optional key)
-│   │   └── reddit.py             # Reddit/PRAW (optional creds)
-│   └── routes/                   # v2 API route modules
-│       ├── snapshot.py           # /symbols/{symbol}/snapshot
-│       ├── history.py            # /symbols/{symbol}/history
-│       ├── sentiment.py          # /symbols/{symbol}/sentiment
-│       ├── anomalies.py          # /anomalies
-│       ├── market.py             # /market/overview
-│       ├── watchlist.py          # /watchlist CRUD
-│       └── websocket.py          # WebSocket streaming
-│
-├── ml/                           # ML pipeline
-│   ├── features.py               # Feature engineering (RSI, MACD, BB, vol z-score)
-│   ├── trend.py                  # Trend classifier (HistGBT + rule-based fallback)
-│   ├── anomaly.py                # Anomaly detector (Isolation Forest)
-│   ├── sentiment.py              # Sentiment scorer (VADER + FinBERT path)
-│   └── train_cli.py              # CLI to train trend model
-│
-├── frontend/                     # React dashboard (Vite + TypeScript + Tailwind)
-│   ├── src/
-│   │   ├── pages/                # Overview, SymbolDetail, Watchlist, Anomalies
-│   │   ├── components/           # Layout with search + nav
-│   │   ├── hooks/                # useWebSocket for real-time streaming
-│   │   └── lib/                  # API client + formatting utils
-│   └── src-tauri/                # Tauri desktop shell (Rust)
-│
-├── src/                          # v1 legacy code (C++, Python, Java, Vanilla JS)
-├── tests/                        # pytest suite (28 tests)
-├── Dockerfile                    # Multi-stage build (Node + Python)
-├── docker-compose.yml            # Local Docker setup
-├── fly.toml                      # Fly.io deployment
-├── railway.json                  # Railway deployment
-└── .github/workflows/            # CI/CD
-    ├── ci.yml                    # Lint + test + build on every push
-    └── build-desktop.yml         # Cross-platform Tauri builds on tag
+
+### Train ML Model (optional)
+
+```bash
+python -m ml.train_cli
+```
+
+### Run Tests
+
+```bash
+pytest tests/ -v
 ```
 
 ---
@@ -209,25 +243,38 @@ Stock-Analyzer/
 
 | Model | Algorithm | Input | Output |
 |-------|-----------|-------|--------|
-| **Trend Classifier** | HistGradientBoosting (sklearn) | RSI, MACD, Bollinger width, volume z-score, MA crossover | `strong_uptrend \| uptrend \| sideways \| downtrend \| strong_downtrend` + confidence |
-| **Anomaly Detector** | Isolation Forest (sklearn) | Price change %, volume ratio, volatility | Anomaly score (0–1) + boolean flag |
-| **Sentiment Scorer** | VADER + financial lexicon (FinBERT optional) | News headlines, Reddit posts | Score (-1 to 1) + label + confidence |
+| **Trend Classifier** | HistGradientBoosting | RSI, MACD, Bollinger width, volume z-score, MA crossover | 5-class trend + confidence |
+| **Anomaly Detector** | Isolation Forest | Price change %, volume ratio, volatility | Score (0–1) + flag |
+| **Sentiment Scorer** | VADER + financial lexicon | News headlines, Reddit posts | Score (-1 to 1) + label |
 
 All models run locally. No cloud ML services required.
 
 ---
 
-## Zero-Secrets & Offline Mode
+## Project Structure
 
-| Feature | Online (with API keys) | Offline (zero keys) |
-|---------|----------------------|-------------------|
-| Price data (yfinance) | Yes | Yes |
-| Technical indicators | Yes | Yes |
-| Trend classification | Yes | Yes |
-| Anomaly detection | Yes | Yes |
-| Sentiment (VADER) | Yes | Yes |
-| News headlines | NewsAPI/Finnhub | Graceful fallback |
-| Reddit sentiment | Reddit API | Graceful fallback |
+```
+Stock-Analyzer/
+├── api/                      # FastAPI backend
+│   ├── main.py               # App entry — v1 + v2 routes, React SPA serving
+│   ├── config.py             # Centralized config (CORS, TTLs, validation)
+│   ├── cache.py              # In-memory TTL cache
+│   ├── validation.py         # Input validation (OWASP A03)
+│   ├── middleware.py          # Security headers middleware
+│   ├── logging_config.py     # Structured logging (structlog)
+│   ├── db/                   # SQLAlchemy ORM layer
+│   ├── ingestion/            # Multi-source data ingestion
+│   └── routes/               # v2 API route modules
+├── ml/                       # ML pipeline (trend, anomaly, sentiment)
+├── frontend/                 # React dashboard (Vite + TS + Tailwind)
+│   └── src-tauri/            # Tauri desktop shell (Rust)
+├── src/                      # v1 legacy (C++, Python, Java, vanilla JS)
+├── tests/                    # pytest suite
+├── install.sh                # One-command installer
+├── Dockerfile                # Multi-stage production build
+├── docker-compose.yml        # Local Docker setup
+└── .github/workflows/        # CI/CD (lint, test, build, release)
+```
 
 ---
 
@@ -236,44 +283,12 @@ All models run locally. No cloud ML services required.
 | OWASP Risk | Mitigation |
 |-----------|-----------|
 | **A01: Broken Access Control** | Watchlist scoped to user; JWT path for production |
-| **A03: Injection** | Strict regex validation (`^[A-Za-z0-9.\-]{1,10}$`), parameterized SQL via SQLAlchemy |
-| **A04: Insecure Design** | Per-IP rate limiting (60/min), HTTP 429 + Retry-After |
-| **A05: Misconfiguration** | CORS whitelist, security headers (CSP, X-Frame-Options, etc.) |
+| **A03: Injection** | Strict regex validation, parameterized SQL via SQLAlchemy |
+| **A04: Insecure Design** | Per-IP rate limiting (configurable), HTTP 429 + Retry-After |
+| **A05: Misconfiguration** | CORS whitelist, security headers (CSP, X-Frame-Options) |
 | **A06: SSRF** | No user-supplied outbound URLs; data sources hardcoded |
 | **A07: XSS** | React JSX escaping, CSP headers |
 | **A09: Logging** | Structured JSON logging via structlog |
-
----
-
-## Desktop App (Tauri)
-
-The Tauri project is scaffolded in `frontend/src-tauri/`. To build desktop installers:
-
-```bash
-# Requires Rust toolchain + platform deps
-cd frontend
-npm run tauri build
-```
-
-| Platform | Output |
-|----------|--------|
-| macOS | `.dmg` + `.app` bundle |
-| Windows | `.msi` + `.exe` installer |
-| Linux | `.deb` + `.AppImage` |
-
-CI/CD builds all three platforms via GitHub Actions on git tag push.
-
----
-
-## Data Sources
-
-| Source | API Key Required | Used For |
-|--------|-----------------|----------|
-| Yahoo Finance (yfinance) | No | Price data, OHLCV, fundamentals, news |
-| Alpha Vantage | Optional | Intraday time series, technicals |
-| Finnhub | Optional | Company news, real-time quotes |
-| NewsAPI | Optional | News headlines for sentiment |
-| Reddit (PRAW) | Optional | Social sentiment from r/wallstreetbets, r/stocks |
 
 ---
 
