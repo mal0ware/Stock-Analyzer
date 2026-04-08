@@ -67,7 +67,7 @@ jobs:
       - name: Build Python sidecar (Unix)
         if: matrix.platform != 'windows-latest'
         run: |
-          pyinstaller --onefile --name market-analyst-api \
+          pyinstaller --name market-analyst-api \
             api/main.py \
             --add-data "api:api" \
             --add-data "ml:ml" \
@@ -76,16 +76,16 @@ jobs:
       - name: Build Python sidecar (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
-          pyinstaller --onefile --name market-analyst-api api/main.py --add-data "api;api" --add-data "ml;ml" --add-data "frontend/dist;frontend-dist"
+          pyinstaller --name market-analyst-api api/main.py --add-data "api;api" --add-data "ml;ml" --add-data "frontend/dist;frontend-dist"
 
-      - name: Copy sidecar to Tauri binaries
+      - name: Copy sidecar to Tauri resources
         shell: bash
         run: |
-          mkdir -p frontend/src-tauri/binaries
-          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp dist/market-analyst-api.exe "frontend/src-tauri/binaries/market-analyst-api-${{ matrix.target }}.exe"
-          else
-            cp dist/market-analyst-api "frontend/src-tauri/binaries/market-analyst-api-${{ matrix.target }}"
+          mkdir -p frontend/src-tauri/resources
+          cp -r dist/market-analyst-api frontend/src-tauri/resources/sidecar
+          # Ensure the binary is executable (Unix)
+          if [[ "${{ matrix.platform }}" != "windows-latest" ]]; then
+            chmod +x frontend/src-tauri/resources/sidecar/market-analyst-api
           fi
 
       # Build Tauri desktop app (.exe / .dmg / .deb / .AppImage)

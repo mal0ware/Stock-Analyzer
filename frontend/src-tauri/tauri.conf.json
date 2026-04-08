@@ -13,7 +13,7 @@
     "windows": [
       {
         "title": "AI Market Analyst",
-        "url": "http://localhost:8080",
+        "url": "about:blank",
         "width": 1320,
         "height": 880,
         "resizable": true,
@@ -32,8 +32,8 @@
       "icons/icon.png",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/market-analyst-api"
+    "resources": [
+      "resources/sidecar/**"
     ]
   }
 }
