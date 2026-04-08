@@ -3,11 +3,34 @@
 const ChartRenderer = {
     priceChart: null,
     volumeChart: null,
+    _themeCache: null,
+
+    // Cache CSS custom property values to avoid repeated getComputedStyle() calls
+    // which force layout recalculation. Invalidated on theme change.
+    _getTheme() {
+        if (!this._themeCache) {
+            const style = getComputedStyle(document.documentElement);
+            this._themeCache = {
+                textMuted: style.getPropertyValue('--text-muted').trim() || '#6b6e85',
+                border: style.getPropertyValue('--border').trim() || '#2a2d3e',
+                bgSecondary: style.getPropertyValue('--bg-secondary').trim() || '#181a24',
+                textPrimary: style.getPropertyValue('--text-primary').trim() || '#e8eaf0',
+                textSecondary: style.getPropertyValue('--text-secondary').trim() || '#9a9db5',
+                green: style.getPropertyValue('--green').trim() || '#00d67e',
+                red: style.getPropertyValue('--red').trim() || '#ff6b6b',
+                accent: style.getPropertyValue('--accent').trim() || '#6c5ce7',
+                chartGrid: style.getPropertyValue('--chart-grid').trim() || 'rgba(255,255,255,0.04)',
+            };
+        }
+        return this._themeCache;
+    },
+
+    invalidateThemeCache() { this._themeCache = null; },
 
     init() {
-        const style = getComputedStyle(document.documentElement);
-        Chart.defaults.color = style.getPropertyValue('--text-muted').trim() || '#6b6e85';
-        Chart.defaults.borderColor = style.getPropertyValue('--border').trim() || '#2a2d3e';
+        const t = this._getTheme();
+        Chart.defaults.color = t.textMuted;
+        Chart.defaults.borderColor = t.border;
         Chart.defaults.font.family = "'Inter', 'Segoe UI', system-ui, sans-serif";
     },
 
@@ -18,12 +41,13 @@ const ChartRenderer = {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+        const t = this._getTheme();
 
         const closes = data.closes.filter(v => v != null);
         if (closes.length === 0) return;
 
         const isUp = closes[closes.length - 1] >= closes[0];
-        const mainColor = isUp ? getVar('--green', '#00d67e') : getVar('--red', '#ff6b6b');
+        const mainColor = isUp ? t.green : t.red;
 
         // Build datasets
         const datasets = [];
@@ -129,7 +153,7 @@ const ChartRenderer = {
             datasets.push({
                 label: 'Target',
                 data: [...padBefore, ...forecastMean],
-                borderColor: getVar('--accent', '#6c5ce7'),
+                borderColor: t.accent,
                 backgroundColor: 'transparent',
                 fill: false,
                 borderDash: [6, 3],
@@ -137,7 +161,7 @@ const ChartRenderer = {
                 tension: 0.3,
                 pointRadius: 0,
                 pointHoverRadius: 4,
-                pointHoverBackgroundColor: getVar('--accent', '#6c5ce7'),
+                pointHoverBackgroundColor: t.accent,
             });
         }
 
@@ -151,10 +175,10 @@ const ChartRenderer = {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: getVar('--bg-secondary', '#181a24'),
-                        titleColor: getVar('--text-primary', '#e8eaf0'),
-                        bodyColor: getVar('--text-secondary', '#9a9db5'),
-                        borderColor: getVar('--border', '#2a2d3e'),
+                        backgroundColor: t.bgSecondary,
+                        titleColor: t.textPrimary,
+                        bodyColor: t.textSecondary,
+                        borderColor: t.border,
                         borderWidth: 1,
                         padding: 10,
                         displayColors: false,
@@ -184,7 +208,7 @@ const ChartRenderer = {
                     },
                     y: {
                         position: 'right',
-                        grid: { color: getVar('--chart-grid', 'rgba(255,255,255,0.04)') },
+                        grid: { color: t.chartGrid },
                         ticks: {
                             font: { size: 10 },
                             callback: v => `$${v.toFixed(v >= 1000 ? 0 : 2)}`
@@ -203,6 +227,7 @@ const ChartRenderer = {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+        const t = this._getTheme();
 
         const colors = data.volumes.map((v, i) => {
             if (i === 0) return 'rgba(108, 92, 231, 0.5)';
@@ -228,7 +253,7 @@ const ChartRenderer = {
                     x: { display: false },
                     y: {
                         position: 'right',
-                        grid: { color: getVar('--chart-grid', 'rgba(255,255,255,0.03)') },
+                        grid: { color: t.chartGrid },
                         ticks: {
                             maxTicksToShow: 3,
                             font: { size: 9 },
