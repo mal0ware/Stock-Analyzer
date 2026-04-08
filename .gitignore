@@ -46,7 +46,6 @@ cmake-build-*/
 
 # Node / Electron
 node_modules/
-package-lock.json
 src/electron/bundled/
 src/electron/build-resources/
 

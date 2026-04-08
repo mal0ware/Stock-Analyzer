@@ -50,7 +50,7 @@ export default function SymbolDetail() {
     } catch { /* ignore */ }
   };
 
-  if (loading) return <div className="text-gray-400 animate-pulse text-center py-20">Loading {symbol}...</div>;
+  if (loading) return <DetailSkeleton symbol={symbol} />;
   if (error) return <div className="text-red-400 text-center py-20">Error: {error}</div>;
   if (!snap || !hist) return null;
 
@@ -69,20 +69,20 @@ export default function SymbolDetail() {
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-white">{snap.symbol}</h1>
+            <h1 className="text-3xl font-bold text-white tracking-tight">{snap.symbol}</h1>
             {connected && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Live" />}
           </div>
           <div className="flex items-baseline gap-3 mt-1">
             <span className="text-2xl text-white font-semibold">${currentPrice.toFixed(2)}</span>
-            <span className={`text-lg font-medium ${pctColor(changePct)}`}>{formatPct(changePct)}</span>
+            <span className={`text-lg font-semibold ${pctColor(changePct)}`}>{formatPct(changePct)}</span>
           </div>
         </div>
         <button
           onClick={toggleWatchlist}
-          className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             inWatchlist
-              ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30'
-              : 'bg-gray-800 text-gray-300 border border-gray-700 hover:border-blue-500/50'
+              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-red-500/15 hover:text-red-400 hover:border-red-500/30'
+              : 'bg-[#131620] text-gray-300 border border-[#1e2235] hover:border-blue-500/40 hover:text-blue-400'
           }`}
         >
           {inWatchlist ? 'In Watchlist' : '+ Watchlist'}
@@ -90,7 +90,7 @@ export default function SymbolDetail() {
       </div>
 
       {/* ML Signals */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         <SignalCard
           label="Trend"
           value={snap.signals.trend.replace('_', ' ')}
@@ -118,13 +118,15 @@ export default function SymbolDetail() {
       </div>
 
       {/* Period selector */}
-      <div className="flex gap-1">
+      <div className="flex gap-1 bg-[#131620] rounded-lg p-1 w-fit">
         {PERIODS.map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
-              period === p ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+              period === p
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             {p}
@@ -133,40 +135,40 @@ export default function SymbolDetail() {
       </div>
 
       {/* Price chart */}
-      <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
+      <div className="bg-[#131620] rounded-xl p-4 border border-[#1e2235]">
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
                 <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} />
-            <YAxis domain={['auto', 'auto']} tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} width={60} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e2235" />
+            <XAxis dataKey="date" tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis domain={['auto', 'auto']} tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
             <Tooltip
-              contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '6px' }}
-              labelStyle={{ color: '#9ca3af' }}
+              contentStyle={{ background: '#131620', border: '1px solid #1e2235', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+              labelStyle={{ color: '#8b8fa3' }}
               itemStyle={{ color: '#e5e7eb' }}
             />
-            <Area type="monotone" dataKey="close" stroke="#3b82f6" fill="url(#priceGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="close" stroke="#3b82f6" fill="url(#priceGradient)" strokeWidth={2} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
       {/* Volume chart */}
-      <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-        <h3 className="text-sm text-gray-400 mb-2">Volume</h3>
-        <ResponsiveContainer width="100%" height={120}>
+      <div className="bg-[#131620] rounded-xl p-4 border border-[#1e2235]">
+        <h3 className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Volume</h3>
+        <ResponsiveContainer width="100%" height={100}>
           <BarChart data={chartData}>
-            <XAxis dataKey="date" tick={false} />
-            <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} width={60} />
+            <XAxis dataKey="date" tick={false} axisLine={false} />
+            <YAxis tick={{ fill: '#4b5068', fontSize: 10 }} tickLine={false} axisLine={false} width={60} />
             <Tooltip
-              contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '6px' }}
-              labelStyle={{ color: '#9ca3af' }}
+              contentStyle={{ background: '#131620', border: '1px solid #1e2235', borderRadius: '8px' }}
+              labelStyle={{ color: '#8b8fa3' }}
             />
-            <Bar dataKey="volume" fill="#6366f1" opacity={0.6} />
+            <Bar dataKey="volume" fill="#6366f1" opacity={0.5} radius={[2, 2, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -176,10 +178,29 @@ export default function SymbolDetail() {
 
 function SignalCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
-    <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700/50">
-      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
+    <div className="bg-[#131620] rounded-xl p-3.5 border border-[#1e2235]">
+      <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">{label}</div>
       <div className={`text-lg font-semibold mt-1 capitalize ${color}`}>{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{sub}</div>
+      <div className="text-[11px] text-gray-500 mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
+function DetailSkeleton({ symbol }: { symbol?: string }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-3xl font-bold text-white/30">{symbol ?? '...'}</div>
+        <div className="skeleton h-8 w-36 mt-2" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton h-20 rounded-xl" />
+        ))}
+      </div>
+      <div className="skeleton h-8 w-64 rounded-lg" />
+      <div className="skeleton h-80 rounded-xl" />
+      <div className="skeleton h-28 rounded-xl" />
     </div>
   );
 }

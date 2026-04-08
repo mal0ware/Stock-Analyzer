@@ -13,7 +13,17 @@ export default function Anomalies() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="text-gray-400 animate-pulse text-center py-20">Loading anomalies...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div className="skeleton h-8 w-40" />
+      <div className="skeleton h-4 w-80" />
+      <div className="space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton h-16 rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -25,24 +35,24 @@ export default function Anomalies() {
       </div>
 
       {!data || data.count === 0 ? (
-        <div className="text-center py-20 text-gray-500">
-          <p className="text-lg">No anomalies detected</p>
-          <p className="text-sm mt-1">
-            Anomalies are detected when price or volume deviates significantly from historical patterns.
+        <div className="text-center py-20">
+          <div className="text-gray-500 text-lg">No anomalies detected</div>
+          <p className="text-gray-600 text-sm mt-1">
+            Anomalies appear when price or volume deviates significantly from historical patterns.
             Add symbols to your watchlist and check back later.
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {data.anomalies.map((a, i) => (
             <Link
               key={`${a.symbol}-${i}`}
               to={`/symbol/${a.symbol}`}
-              className="flex items-center justify-between bg-gray-800/50 rounded-lg border border-orange-800/30 p-4 hover:bg-gray-800 transition-colors"
+              className="flex items-center justify-between bg-[#131620] rounded-lg border border-orange-900/30 p-4 hover:bg-[#1a1e2e] transition-colors"
             >
               <div className="flex items-center gap-4">
                 <span className="font-semibold text-white text-lg">{a.symbol}</span>
-                <span className="text-orange-400 font-medium">
+                <span className="text-orange-400 font-medium text-sm">
                   Score: {a.anomaly_score.toFixed(3)}
                 </span>
               </div>
@@ -54,10 +64,10 @@ export default function Anomalies() {
                 )}
                 {a.volume_ratio != null && (
                   <span className="text-gray-400">
-                    {a.volume_ratio.toFixed(1)}x volume
+                    {a.volume_ratio.toFixed(1)}x vol
                   </span>
                 )}
-                <span className="text-gray-500">
+                <span className="text-gray-600 text-xs">
                   {new Date(a.detected_at).toLocaleDateString()}
                 </span>
               </div>
