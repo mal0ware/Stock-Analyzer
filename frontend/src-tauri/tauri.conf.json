@@ -1,26 +1,28 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicosanchez/tauri/dev/tooling/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "",
-    "beforeDevCommand": "",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
   "productName": "AI Market Analyst",
-  "version": "2.0.0",
+  "version": "1.1.0",
   "identifier": "com.stockanalyzer.market-analyst",
   "app": {
     "windows": [
       {
         "title": "AI Market Analyst",
-        "width": 1280,
-        "height": 800,
+        "url": "http://localhost:8080",
+        "width": 1320,
+        "height": 880,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "visible": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ws://localhost:*; img-src 'self' https: data:"
+      "csp": "default-src 'self' http://localhost:* ws://localhost:*; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ws://localhost:* https://*.yahoo.com https://*.finance.yahoo.com; img-src 'self' https: data:"
     }
   },
   "bundle": {

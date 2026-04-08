@@ -8,7 +8,7 @@ a = Analysis(
     datas=[
         ('api', 'api'),
         ('ml', 'ml'),
-        ('src/frontend', 'src/frontend'),
+        ('frontend/dist', 'frontend-dist'),
     ],
     hiddenimports=[
         'uvicorn.logging',
