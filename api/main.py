@@ -450,8 +450,12 @@ app.include_router(websocket_router)
 # Priority: frontend-dist/ (Docker COPY), then ../frontend/dist (local build)
 
 _api_dir = Path(__file__).resolve().parent
+
+# PyInstaller sets sys._MEIPASS to the temp extraction directory
+_meipass = Path(getattr(sys, '_MEIPASS', ''))
 _react_candidates = [
-    _api_dir / ".." / "frontend-dist",     # Docker: COPY --from=frontend-build
+    _meipass / "frontend-dist",             # PyInstaller sidecar bundle
+    _api_dir / ".." / "frontend-dist",      # Docker: COPY --from=frontend-build
     _api_dir / ".." / "frontend" / "dist",  # Local: npm run build
 ]
 

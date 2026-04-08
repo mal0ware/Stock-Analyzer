@@ -31,8 +31,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -45,8 +43,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: api/requirements.txt
 
       # Linux system deps for Tauri
       - name: Install Linux dependencies
@@ -55,12 +51,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      # Build Python sidecar (self-contained binary)
+      # Build React frontend first (needed by both PyInstaller sidecar and Tauri)
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # Build Python sidecar with frontend bundled inside
+      - name: Install Python dependencies
+        run: pip install pyinstaller && pip install -r api/requirements.txt
+
       - name: Build Python sidecar
         run: |
-          pip install pyinstaller
-          pip install -r api/requirements.txt
-          pyinstaller --onefile --name market-analyst-api api/main.py --add-data "api:api" --add-data "ml:ml"
+          pyinstaller --onefile --name market-analyst-api \
+            api/main.py \
+            --add-data "api:api" \
+            --add-data "ml:ml" \
+            --add-data "frontend/dist:frontend-dist"
 
       - name: Copy sidecar to Tauri binaries
         shell: bash
@@ -72,12 +82,7 @@ jobs:
             cp dist/market-analyst-api "frontend/src-tauri/binaries/market-analyst-api-${{ matrix.target }}"
           fi
 
-      # Build frontend
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      # Build Tauri app
+      # Build Tauri desktop app (.exe / .dmg / .deb / .AppImage)
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -90,17 +95,14 @@ jobs:
           releaseBody: |
             ## AI Market Analyst ${{ github.ref_name }}
 
-            Download the installer for your platform below.
+            Download the installer for your platform:
 
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon) | `.dmg` |
-            | Windows | `.msi` / `.exe` |
-            | Linux | `.deb` / `.AppImage` |
+            | Platform | File | How to install |
+            |----------|------|----------------|
+            | **Windows** | `.msi` | Double-click, follow the wizard |
+            | **macOS** (Apple Silicon) | `.dmg` | Open, drag to Applications |
+            | **Linux** | `.deb` or `.AppImage` | Double-click or `sudo dpkg -i` |
 
-            ### Quick Install (no download needed)
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/mal0ware/Stock-Analyzer/main/install.sh | bash
-            ```
+            The app runs like any desktop application — no terminal, no browser, no setup required.
           releaseDraft: false
           prerelease: false
