@@ -10,6 +10,10 @@
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem(STORAGE_KEY, theme);
         updateActiveOption(theme);
+        // Invalidate chart theme cache so charts pick up new colors
+        if (typeof ChartRenderer !== 'undefined' && ChartRenderer.invalidateThemeCache) {
+            ChartRenderer.invalidateThemeCache();
+        }
     }
 
     function updateActiveOption(theme) {

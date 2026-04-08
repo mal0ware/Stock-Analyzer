@@ -1,10 +1,11 @@
 """
-Stock Analyzer — FastAPI Backend (v2: AI Market Analyst)
+Stock Analyzer — FastAPI Backend
 
-Evolves v1 endpoints with ML intelligence layer, multi-source data ingestion,
-WebSocket streaming, SQLite persistence, and watchlist management.
+Replaces the C++ server, Python subprocesses, and Java classes
+with a single Python service. Designed to run in Docker and deploy
+to any cloud platform (Railway, Fly.io, AWS, etc.).
 
-v1 Endpoints (preserved):
+Endpoints:
     GET /api/health          — Health check
     GET /api/search?q=       — Search tickers
     GET /api/quote/{symbol}  — Current quote + fundamentals
@@ -13,25 +14,17 @@ v1 Endpoints (preserved):
     GET /api/interpret/{symbol} — Plain-English insights
     GET /api/news/{symbol}   — Recent news articles
     GET /api/glossary        — Educational glossary
-
-v2 Endpoints (new):
-    GET  /api/v1/symbols/{symbol}/snapshot  — Price + ML signals + sentiment
-    GET  /api/v1/symbols/{symbol}/history   — OHLCV with structured data format
-    GET  /api/v1/symbols/{symbol}/sentiment — Sentiment timeline (news + social)
-    GET  /api/v1/anomalies                  — Recent anomaly detections
-    GET  /api/v1/market/overview            — Sector heatmap + top movers
-    GET  /api/v1/watchlist                  — User watchlist
-    POST /api/v1/watchlist                  — Add/remove watchlist symbols
-    WS   /ws/stream/{symbol}               — Real-time price push
 """
 
+import asyncio
 import os
 import re
-import sys
 import time
 import warnings
 from collections import defaultdict
-from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,66 +34,61 @@ from fastapi.staticfiles import StaticFiles
 warnings.filterwarnings("ignore")
 os.environ["PYTHONWARNINGS"] = "ignore"
 
-# Ensure api/ is on the path for sibling imports
-sys.path.insert(0, os.path.dirname(__file__))
-
 import yfinance as yf
 
 from analysis import compute_all
 from interpreter import generate_insights
 from glossary import get_all_terms, get_term
-from config import CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW, CACHE_TTLS
-from cache import cache
-from validation import validate_symbol as _validate_symbol, validate_period as _validate_period
-from logging_config import setup_logging, get_logger
-from middleware import SecurityHeadersMiddleware
-
-# Initialize structured logging
-setup_logging()
-log = get_logger("api")
-
-
-# ---------------------------------------------------------------------------
-# Database initialization on startup
-# ---------------------------------------------------------------------------
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    from db.session import init_db
-    log.info("initializing_database")
-    init_db()
-    log.info("startup_complete", version="2.0.0")
-    yield
-    log.info("shutdown")
-
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
-app = FastAPI(
-    title="AI Market Analyst API",
-    version="2.0.0",
-    description="Multi-signal market intelligence — price, ML signals, sentiment, anomalies.",
-    lifespan=lifespan,
-)
+app = FastAPI(title="Stock Analyzer API", version="2.0.0")
 
-app.add_middleware(SecurityHeadersMiddleware)
+ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8089").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
+# Thread pool for running blocking yfinance calls without blocking the event loop.
+# 8 workers allows 8 concurrent stock lookups — a huge improvement over serial execution.
+_executor = ThreadPoolExecutor(max_workers=8)
+
+
+async def run_in_thread(fn, *args):
+    """Run a blocking function in the thread pool to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, partial(fn, *args))
 
 # ---------------------------------------------------------------------------
-# Rate limiter (60 req/min per IP — carried from v1)
+# In-memory cache (production: use Redis)
+# ---------------------------------------------------------------------------
+
+_cache: dict[str, tuple[float, object]] = {}
+
+def cached(key: str, ttl: int):
+    """Return cached value if fresh, else None."""
+    if key in _cache:
+        ts, val = _cache[key]
+        if time.time() - ts < ttl:
+            return val
+    return None
+
+def cache_set(key: str, val: object):
+    _cache[key] = (time.time(), val)
+
+# ---------------------------------------------------------------------------
+# Rate limiter (60 req/min per IP)
 # ---------------------------------------------------------------------------
 
 _rate: dict[str, list[float]] = defaultdict(list)
-
+RATE_LIMIT = int(os.getenv("RATE_LIMIT", "60"))
+RATE_WINDOW = 60
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
@@ -117,14 +105,12 @@ async def rate_limit(request: Request, call_next):
     response = await call_next(request)
     return response
 
-
 # ---------------------------------------------------------------------------
-# v1 validation helpers (kept for v1 endpoint compatibility)
+# Validation
 # ---------------------------------------------------------------------------
 
 VALID_SYMBOL = re.compile(r"^[A-Za-z0-9.\-]{1,10}$")
 VALID_PERIODS = {"1d", "5d", "1mo", "6mo", "1y", "5y"}
-
 
 def validate_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
@@ -132,94 +118,162 @@ def validate_symbol(symbol: str) -> str:
         raise HTTPException(400, f"Invalid ticker symbol: '{symbol}'")
     return s
 
-
 def validate_period(period: str) -> str:
     if period not in VALID_PERIODS:
         raise HTTPException(400, f"Invalid period: '{period}'. Allowed: {', '.join(sorted(VALID_PERIODS))}")
     return period
 
+# ---------------------------------------------------------------------------
+# Blocking data fetch functions (run in thread pool)
+# ---------------------------------------------------------------------------
 
-# ===========================================================================
-# v1 ENDPOINTS (preserved — same behavior as before)
-# ===========================================================================
+def _fetch_quote_sync(sym: str) -> dict:
+    """Blocking quote fetch — runs in thread pool."""
+    ticker = yf.Ticker(sym)
+    info = ticker.info
+    price = (info.get("regularMarketPrice") or info.get("currentPrice")) if info else None
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "version": "2.0.0"}
+    if not info or not price:
+        try:
+            fi = ticker.fast_info
+            if fi and hasattr(fi, "last_price") and fi.last_price:
+                return {
+                    "symbol": sym, "name": sym,
+                    "price": round(float(fi.last_price), 2),
+                    "previousClose": round(float(fi.previous_close), 2) if hasattr(fi, "previous_close") and fi.previous_close else None,
+                    "marketCap": int(fi.market_cap) if hasattr(fi, "market_cap") and fi.market_cap else None,
+                    "volume": int(fi.last_volume) if hasattr(fi, "last_volume") and fi.last_volume else None,
+                    "change": None, "changePercent": None,
+                }
+        except Exception:
+            pass
+        return None  # Signal 404
+
+    return _build_quote(info, sym, price)
 
 
-@app.get("/api/search")
-def search(q: str = Query(..., max_length=100)):
-    key = f"search:{q}"
-    hit = cache.get(key)
-    if hit is not None:
-        return hit
+def _fetch_history_sync(sym: str, period: str) -> dict:
+    """Blocking history fetch — runs in thread pool."""
+    ticker = yf.Ticker(sym)
+    yf_period, interval = PERIOD_MAP.get(period, ("1mo", "1d"))
+    hist = ticker.history(period=yf_period, interval=interval)
 
+    if hist.empty:
+        return None  # Signal 404
+
+    dates, opens, highs, lows, closes, volumes = [], [], [], [], [], []
+    for idx, row in hist.iterrows():
+        dates.append(idx.strftime("%Y-%m-%d %H:%M"))
+        opens.append(round(float(row["Open"]), 2) if row["Open"] == row["Open"] else None)
+        highs.append(round(float(row["High"]), 2) if row["High"] == row["High"] else None)
+        lows.append(round(float(row["Low"]), 2) if row["Low"] == row["Low"] else None)
+        closes.append(round(float(row["Close"]), 2) if row["Close"] == row["Close"] else None)
+        volumes.append(int(row["Volume"]) if row["Volume"] == row["Volume"] else 0)
+
+    return {
+        "symbol": sym, "period": period,
+        "dates": dates, "opens": opens, "highs": highs,
+        "lows": lows, "closes": closes, "volumes": volumes,
+    }
+
+
+def _fetch_news_sync(sym: str) -> dict:
+    """Blocking news fetch — runs in thread pool."""
+    ticker = yf.Ticker(sym)
+    raw_news = ticker.news or []
+    articles = []
+    for item in raw_news[:8]:
+        content = item.get("content", {}) if isinstance(item, dict) else {}
+        if content:
+            thumb = ""
+            thumbnail = content.get("thumbnail")
+            if thumbnail and isinstance(thumbnail, dict):
+                resolutions = thumbnail.get("resolutions", [])
+                if resolutions:
+                    thumb = resolutions[-1].get("url", "")
+            articles.append({
+                "title": content.get("title", item.get("title", "")),
+                "publisher": content.get("provider", {}).get("displayName", item.get("publisher", "")),
+                "link": content.get("canonicalUrl", {}).get("url", item.get("link", "")),
+                "publishedAt": content.get("pubDate", item.get("providerPublishTime", "")),
+                "thumbnail": thumb,
+            })
+        else:
+            articles.append({
+                "title": item.get("title", ""),
+                "publisher": item.get("publisher", ""),
+                "link": item.get("link", ""),
+                "publishedAt": item.get("providerPublishTime", ""),
+                "thumbnail": "",
+            })
+    return {"articles": articles, "symbol": sym}
+
+
+def _search_sync(q: str) -> dict:
+    """Blocking search — runs in thread pool."""
     import urllib.request
     import urllib.parse
     import json
 
-    try:
-        url = (
-            f"https://query2.finance.yahoo.com/v1/finance/search"
-            f"?q={urllib.parse.quote(q)}&quotesCount=6&newsCount=0"
-        )
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
+    url = (
+        f"https://query2.finance.yahoo.com/v1/finance/search"
+        f"?q={urllib.parse.quote(q)}&quotesCount=6&newsCount=0"
+    )
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        data = json.loads(resp.read().decode())
 
-        results = [
-            {
-                "symbol": quote.get("symbol", ""),
-                "name": quote.get("shortname") or quote.get("longname", ""),
-                "exchange": quote.get("exchange", ""),
-                "type": quote.get("quoteType", ""),
-            }
-            for quote in data.get("quotes", [])
-            if quote.get("quoteType") in ("EQUITY", "ETF")
-        ]
-        out = {"results": results}
-    except Exception as e:
-        out = {"results": [], "error": str(e)}
-
-    cache.set(key, out, CACHE_TTLS["search"])
-    return out
+    results = [
+        {
+            "symbol": quote.get("symbol", ""),
+            "name": quote.get("shortname") or quote.get("longname", ""),
+            "exchange": quote.get("exchange", ""),
+            "type": quote.get("quoteType", ""),
+        }
+        for quote in data.get("quotes", [])
+        if quote.get("quoteType") in ("EQUITY", "ETF")
+    ]
+    return {"results": results}
 
 
-@app.get("/api/quote/{symbol}")
-def quote(symbol: str):
-    sym = validate_symbol(symbol)
-    key = f"quote:{sym}"
-    hit = cache.get(key)
+# ---------------------------------------------------------------------------
+# Endpoints (all async — blocking work delegated to thread pool)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/search")
+async def search(q: str = Query(..., max_length=100)):
+    key = f"search:{q}"
+    hit = cached(key, 300)
     if hit is not None:
         return hit
 
     try:
-        ticker = yf.Ticker(sym)
-        info = ticker.info
-        price = (info.get("regularMarketPrice") or info.get("currentPrice")) if info else None
+        out = await run_in_thread(_search_sync, q)
+    except Exception as e:
+        out = {"results": [], "error": str(e)}
 
-        if not info or not price:
-            try:
-                fi = ticker.fast_info
-                if fi and hasattr(fi, "last_price") and fi.last_price:
-                    out = {
-                        "symbol": sym,
-                        "name": sym,
-                        "price": round(float(fi.last_price), 2),
-                        "previousClose": round(float(fi.previous_close), 2) if hasattr(fi, "previous_close") and fi.previous_close else None,
-                        "marketCap": int(fi.market_cap) if hasattr(fi, "market_cap") and fi.market_cap else None,
-                        "volume": int(fi.last_volume) if hasattr(fi, "last_volume") and fi.last_volume else None,
-                        "change": None, "changePercent": None,
-                    }
-                    cache.set(key, out, CACHE_TTLS["quote"])
-                    return out
-            except Exception:
-                pass
+    cache_set(key, out)
+    return out
+
+
+@app.get("/api/quote/{symbol}")
+async def quote(symbol: str):
+    sym = validate_symbol(symbol)
+    key = f"quote:{sym}"
+    hit = cached(key, 30)
+    if hit is not None:
+        return hit
+
+    try:
+        out = await run_in_thread(_fetch_quote_sync, sym)
+        if out is None:
             raise HTTPException(404, f"No data found for ticker '{sym}'")
-
-        out = _build_quote(info, sym, price)
-        cache.set(key, out, CACHE_TTLS["quote"])
+        cache_set(key, out)
         return out
     except HTTPException:
         raise
@@ -294,43 +348,20 @@ PERIOD_MAP = {
 
 
 @app.get("/api/history/{symbol}")
-def history(symbol: str, period: str = "1mo"):
+async def history(symbol: str, period: str = "1mo"):
     sym = validate_symbol(symbol)
     period = validate_period(period)
     ttl = 60 if period in ("1d", "5d") else 300
     key = f"history:{sym}:{period}"
-    hit = cache.get(key)
+    hit = cached(key, ttl)
     if hit is not None:
         return hit
 
     try:
-        ticker = yf.Ticker(sym)
-        yf_period, interval = PERIOD_MAP.get(period, ("1mo", "1d"))
-        hist = ticker.history(period=yf_period, interval=interval)
-
-        if hist.empty:
+        out = await run_in_thread(_fetch_history_sync, sym, period)
+        if out is None:
             raise HTTPException(404, f"No history data for '{sym}' (period={period})")
-
-        dates, opens, highs, lows, closes, volumes = [], [], [], [], [], []
-        for idx, row in hist.iterrows():
-            dates.append(idx.strftime("%Y-%m-%d %H:%M"))
-            opens.append(round(float(row["Open"]), 2) if row["Open"] == row["Open"] else None)
-            highs.append(round(float(row["High"]), 2) if row["High"] == row["High"] else None)
-            lows.append(round(float(row["Low"]), 2) if row["Low"] == row["Low"] else None)
-            closes.append(round(float(row["Close"]), 2) if row["Close"] == row["Close"] else None)
-            volumes.append(int(row["Volume"]) if row["Volume"] == row["Volume"] else 0)
-
-        out = {
-            "symbol": sym,
-            "period": period,
-            "dates": dates,
-            "opens": opens,
-            "highs": highs,
-            "lows": lows,
-            "closes": closes,
-            "volumes": volumes,
-        }
-        cache.set(key, out, ttl)
+        cache_set(key, out)
         return out
     except HTTPException:
         raise
@@ -339,132 +370,74 @@ def history(symbol: str, period: str = "1mo"):
 
 
 @app.get("/api/analysis/{symbol}")
-def analysis(symbol: str, period: str = "1y"):
+async def analysis(symbol: str, period: str = "1y"):
     sym = validate_symbol(symbol)
     period = validate_period(period)
     key = f"analysis:{sym}:{period}"
-    hit = cache.get(key)
+    hit = cached(key, 120)
     if hit is not None:
         return hit
 
-    hist = history(sym, period)
+    # Fetch history in thread pool, then compute indicators (CPU-bound, fast)
+    hist = await history(sym, period)
     if "error" in hist:
         return hist
 
     out = compute_all(hist)
-    cache.set(key, out, CACHE_TTLS["analysis"])
+    cache_set(key, out)
     return out
 
 
 @app.get("/api/interpret/{symbol}")
-def interpret(symbol: str):
+async def interpret(symbol: str):
     sym = validate_symbol(symbol)
     key = f"interpret:{sym}"
-    hit = cache.get(key)
+    hit = cached(key, 60)
     if hit is not None:
         return hit
 
-    quote_data = quote(sym)
+    quote_data = await quote(sym)
     if "error" in quote_data:
         return {"insights": ["Unable to generate analysis at this time."]}
 
     out = {"insights": generate_insights(quote_data)}
-    cache.set(key, out, CACHE_TTLS["interpret"])
+    cache_set(key, out)
     return out
 
 
 @app.get("/api/news/{symbol}")
-def news(symbol: str):
+async def news(symbol: str):
     sym = validate_symbol(symbol)
     key = f"news:{sym}"
-    hit = cache.get(key)
+    hit = cached(key, 300)
     if hit is not None:
         return hit
 
     try:
-        ticker = yf.Ticker(sym)
-        raw_news = ticker.news or []
-        articles = []
-        for item in raw_news[:8]:
-            content = item.get("content", {}) if isinstance(item, dict) else {}
-            if content:
-                thumb = ""
-                thumbnail = content.get("thumbnail")
-                if thumbnail and isinstance(thumbnail, dict):
-                    resolutions = thumbnail.get("resolutions", [])
-                    if resolutions:
-                        thumb = resolutions[-1].get("url", "")
-                articles.append({
-                    "title": content.get("title", item.get("title", "")),
-                    "publisher": content.get("provider", {}).get("displayName", item.get("publisher", "")),
-                    "link": content.get("canonicalUrl", {}).get("url", item.get("link", "")),
-                    "publishedAt": content.get("pubDate", item.get("providerPublishTime", "")),
-                    "thumbnail": thumb,
-                })
-            else:
-                articles.append({
-                    "title": item.get("title", ""),
-                    "publisher": item.get("publisher", ""),
-                    "link": item.get("link", ""),
-                    "publishedAt": item.get("providerPublishTime", ""),
-                    "thumbnail": "",
-                })
-        out = {"articles": articles, "symbol": sym}
+        out = await run_in_thread(_fetch_news_sync, sym)
     except Exception:
         out = {"articles": [], "symbol": sym}
 
-    cache.set(key, out, CACHE_TTLS["news"])
+    cache_set(key, out)
     return out
 
 
 @app.get("/api/glossary")
-def glossary():
+async def glossary():
     key = "glossary"
-    hit = cache.get(key)
+    hit = cached(key, 3600)
     if hit is not None:
         return hit
 
     out = {"terms": get_all_terms()}
-    cache.set(key, out, CACHE_TTLS["glossary"])
+    cache_set(key, out)
     return out
-
-
-# ===========================================================================
-# v2 ROUTES (mounted from route modules)
-# ===========================================================================
-
-from routes.snapshot import router as snapshot_router
-from routes.history import router as history_v2_router
-from routes.sentiment import router as sentiment_router
-from routes.anomalies import router as anomalies_router
-from routes.market import router as market_router
-from routes.watchlist import router as watchlist_router
-from routes.websocket import router as websocket_router
-
-app.include_router(snapshot_router)
-app.include_router(history_v2_router)
-app.include_router(sentiment_router)
-app.include_router(anomalies_router)
-app.include_router(market_router)
-app.include_router(watchlist_router)
-app.include_router(websocket_router)
 
 
 # ---------------------------------------------------------------------------
 # Serve frontend static files (for local/Docker use)
 # ---------------------------------------------------------------------------
 
-# Prefer v2 React build, then Docker path, then fall back to v1
-_candidates = [
-    os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"),  # local build
-    os.path.join(os.path.dirname(__file__), "..", "frontend-dist"),     # Docker build
-    os.path.join(os.path.dirname(__file__), "..", "src", "frontend"),   # v1 legacy
-]
-FRONTEND_DIR = next((d for d in _candidates if os.path.isdir(d)), None)
-if FRONTEND_DIR:
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "frontend")
+if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8080")))

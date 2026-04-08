@@ -3,14 +3,18 @@
 delete process.env.ELECTRON_RUN_AS_NODE;
 
 const { app, BrowserWindow, shell } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
 
 const PORT = 8089;
+const IS_WIN = process.platform === 'win32';
+const PATH_SEP = IS_WIN ? ';' : ':';
+
 let serverProcess = null;
 let mainWindow = null;
 
@@ -25,8 +29,11 @@ function getBackendDir() {
 
 function startServer() {
     const backendDir = getBackendDir();
-    const serverPath = path.join(backendDir, 'stock_analyzer');
-    console.log('Starting C++ backend:', serverPath);
+    const binaryName = IS_WIN ? 'stock_analyzer.exe' : 'stock_analyzer';
+    const serverPath = path.join(backendDir, binaryName);
+    const hasFastAPI = fs.existsSync(path.join(backendDir, 'api', 'main.py'));
+
+    console.log('Starting backend:', serverPath);
     console.log('Backend dir:', backendDir);
 
     // Build a clean environment — remove Python/conda variables that
@@ -41,19 +48,47 @@ function startServer() {
     }
 
     // Prepend bundled runtimes to PATH (packaged mode) plus user local tools
-    const extraPaths = [
-        path.join(backendDir, 'python-env', 'bin'),
-        path.join(backendDir, 'jre', 'bin'),
-        `${process.env.HOME}/.local/jdk/bin`,
-        `${process.env.HOME}/.local/bin`,
-    ];
-    cleanEnv.PATH = extraPaths.join(':') + ':' + (cleanEnv.PATH || '');
+    const extraPaths = [];
+    if (IS_WIN) {
+        extraPaths.push(path.join(backendDir, 'python-env'));
+        extraPaths.push(path.join(backendDir, 'python-env', 'Scripts'));
+        extraPaths.push(path.join(backendDir, 'jre', 'bin'));
+    } else {
+        extraPaths.push(path.join(backendDir, 'python-env', 'bin'));
+        extraPaths.push(path.join(backendDir, 'jre', 'bin'));
+        extraPaths.push(`${process.env.HOME}/.local/jdk/bin`);
+        extraPaths.push(`${process.env.HOME}/.local/bin`);
+    }
+    cleanEnv.PATH = extraPaths.join(PATH_SEP) + PATH_SEP + (cleanEnv.PATH || '');
 
-    serverProcess = spawn(serverPath, ['--headless'], {
-        cwd: backendDir,
-        env: cleanEnv,
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    // Decide which backend to launch
+    if (fs.existsSync(serverPath)) {
+        // Native C++ backend
+        serverProcess = spawn(serverPath, ['--headless'], {
+            cwd: backendDir,
+            env: cleanEnv,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+    } else if (hasFastAPI) {
+        // FastAPI Python backend fallback (Windows without native binary)
+        const pythonExe = IS_WIN
+            ? path.join(backendDir, 'python-env', 'python.exe')
+            : path.join(backendDir, 'python-env', 'bin', 'python3');
+
+        serverProcess = spawn(pythonExe, [
+            '-m', 'uvicorn', 'main:app',
+            '--host', '127.0.0.1',
+            '--port', String(PORT),
+            '--log-level', 'warning',
+        ], {
+            cwd: path.join(backendDir, 'api'),
+            env: cleanEnv,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+    } else {
+        console.error('No backend found! Neither stock_analyzer nor api/main.py exists in', backendDir);
+        return;
+    }
 
     serverProcess.stdout.on('data', (data) => {
         console.log(`[server] ${data.toString().trim()}`);
@@ -164,11 +199,26 @@ function createWindow() {
     });
 }
 
+function killServer() {
+    if (!serverProcess) return;
+
+    if (IS_WIN) {
+        // On Windows, SIGTERM doesn't work reliably. Kill the process tree.
+        try {
+            execSync(`taskkill /pid ${serverProcess.pid} /T /F`, { stdio: 'ignore' });
+        } catch (e) {
+            serverProcess.kill();
+        }
+    } else {
+        serverProcess.kill('SIGTERM');
+    }
+}
+
 app.whenReady().then(async () => {
     startServer();
 
     try {
-        console.log('Waiting for C++ backend...');
+        console.log('Waiting for backend...');
         await waitForServer();
         console.log('Backend ready. Opening window.');
         createWindow();
@@ -179,14 +229,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    if (serverProcess) {
-        serverProcess.kill('SIGTERM');
-    }
+    killServer();
     app.quit();
 });
 
 app.on('before-quit', () => {
-    if (serverProcess) {
-        serverProcess.kill('SIGTERM');
-    }
+    killServer();
 });

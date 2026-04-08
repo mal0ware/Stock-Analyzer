@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include "analysis.h"
 #include "subprocess.h"
+#include "subprocess_pool.h"
 #include "cache.h"
 #include <iostream>
 #include <filesystem>
@@ -10,6 +11,8 @@
 #include <unordered_map>
 #include <chrono>
 #include <mutex>
+#include <thread>
+#include <future>
 
 using json = nlohmann::json;
 
@@ -20,8 +23,6 @@ static int serverPort = 8089;
 
 // ================================================================
 // Rate Limiter — per-IP request throttling (OWASP A04:2021)
-// Limits each IP to a fixed number of requests per time window.
-// Returns HTTP 429 with Retry-After header when exceeded.
 // ================================================================
 class RateLimiter {
 public:
@@ -66,11 +67,8 @@ static RateLimiter rateLimiter;
 
 // ================================================================
 // Input Validation — strict whitelisting (OWASP A03:2021)
-// All user-supplied parameters are validated before use.
 // ================================================================
 
-// Ticker symbols: 1-10 uppercase alphanumeric chars, dots, hyphens
-// Covers standard formats: AAPL, BRK.B, BF-B, 0700.HK
 static bool isValidSymbol(const std::string& s) {
     if (s.empty() || s.size() > 10) return false;
     for (char c : s) {
@@ -81,13 +79,11 @@ static bool isValidSymbol(const std::string& s) {
     return true;
 }
 
-// Period parameter: strict whitelist of allowed values only
 static bool isValidPeriod(const std::string& s) {
     return s == "1d" || s == "5d" || s == "1mo" ||
            s == "6mo" || s == "1y" || s == "5y";
 }
 
-// Search query: safe printable chars only, max 100 characters
 static bool isValidQuery(const std::string& s) {
     if (s.empty() || s.size() > 100) return false;
     for (char c : s) {
@@ -103,7 +99,6 @@ static bool isValidQuery(const std::string& s) {
 // Response helpers
 // ================================================================
 
-// Return a JSON error response with the given HTTP status code.
 static void sendError(httplib::Response& res, int status, const std::string& message) {
     json err;
     err["error"] = message;
@@ -111,22 +106,15 @@ static void sendError(httplib::Response& res, int status, const std::string& mes
     res.set_content(err.dump(), "application/json");
 }
 
-// Validate subprocess output is valid JSON, send it as the response.
-// If the JSON contains an "error" key, forward it as a 404.
-// Logs raw output to stderr on failure for debugging.
-// Returns true if response was sent successfully, false on error.
 static bool sendJsonResult(httplib::Response& res, const std::string& result, const std::string& context) {
     if (result.empty()) {
         std::cerr << "[" << context << "] subprocess returned empty output" << std::endl;
-        sendError(res, 502, "No response from backend for " + context + ". Check server logs for details.");
+        sendError(res, 502, "No response from backend for " + context + ".");
         return false;
     }
 
-    // Parse the JSON to validate it and check for error payloads
     try {
         auto parsed = json::parse(result);
-
-        // If the Python script returned {"error": "..."}, forward it as a 404
         if (parsed.contains("error") && !parsed.contains("results") && !parsed.contains("articles")) {
             std::string errMsg = parsed["error"].get<std::string>();
             std::cerr << "[" << context << "] backend error: " << errMsg << std::endl;
@@ -139,7 +127,7 @@ static bool sendJsonResult(httplib::Response& res, const std::string& result, co
     } catch (const json::parse_error& e) {
         std::cerr << "[" << context << "] invalid JSON from subprocess: " << e.what()
                   << "\nRaw output (first 500 chars): " << result.substr(0, 500) << std::endl;
-        sendError(res, 502, "Backend returned invalid data for " + context + ". Check server logs.");
+        sendError(res, 502, "Backend returned invalid data for " + context + ".");
         return false;
     }
 }
@@ -148,17 +136,14 @@ static void setupRoutes() {
     std::string basePath = subprocess::getBasePath();
     std::string frontendPath = basePath + "/frontend";
 
-    // Fallback to source directory if running from different location
     if (!std::filesystem::exists(frontendPath)) {
         frontendPath = basePath + "/../src/frontend";
     }
 
-    // Serve static frontend files
     svr.set_mount_point("/", frontendPath);
 
     // ============================================================
     // Security headers (OWASP A05:2021)
-    // Applied to every response from the server.
     // ============================================================
     svr.set_post_routing_handler([](const httplib::Request& req, httplib::Response& res) {
         std::string origin = req.get_header_value("Origin");
@@ -210,28 +195,24 @@ static void setupRoutes() {
     });
 
     // ============================================================
-    // Diagnostics — checks Python, yfinance, Java, and script paths
+    // Diagnostics
     // ============================================================
     svr.Get("/api/diagnostics", [](const httplib::Request&, httplib::Response& res) {
         json diag;
         std::string base = subprocess::getBasePath();
         diag["basePath"] = base;
 
-        // Check script paths
         std::string scriptPath1 = base + "/python/data_fetcher.py";
         std::string scriptPath2 = base + "/../src/python/data_fetcher.py";
         diag["scriptPath"] = std::filesystem::exists(scriptPath1) ? scriptPath1 : scriptPath2;
         diag["scriptExists"] = std::filesystem::exists(scriptPath1) || std::filesystem::exists(scriptPath2);
 
-        // Check Python + yfinance
         std::string pyCheck = subprocess::runPython("data_fetcher.py", {"--version-check"});
         diag["pythonCheck"] = pyCheck.substr(0, 300);
 
-        // Check which python3 is being used
         std::string whichPy = subprocess::run("python3", {"--version"});
         diag["pythonVersion"] = whichPy.substr(0, 100);
 
-        // Check Java
         std::string classPath = base + "/java";
         diag["javaClassPath"] = classPath;
         diag["javaClassExists"] = std::filesystem::exists(classPath + "/analyzer/Interpreter.class");
@@ -250,7 +231,7 @@ static void setupRoutes() {
         }
 
         if (!isValidQuery(query)) {
-            sendError(res, 400, "Invalid search query. Use only letters, numbers, spaces, dots, and hyphens.");
+            sendError(res, 400, "Invalid search query.");
             return;
         }
 
@@ -261,21 +242,18 @@ static void setupRoutes() {
             return;
         }
 
-        std::string result = subprocess::runPython("data_fetcher.py", {"search", query});
+        json argsArr = json::array({query});
+        std::string result = subprocess_pool::request("search", argsArr.dump());
 
-        // For search, always return results array even on error
         try {
             auto parsed = json::parse(result);
             if (parsed.contains("results")) {
                 Cache::instance().set(cacheKey, result, 300);
                 res.set_content(result, "application/json");
             } else {
-                std::cerr << "[search] unexpected response format: " << result.substr(0, 200) << std::endl;
                 res.set_content("{\"results\":[]}", "application/json");
             }
-        } catch (const json::parse_error& e) {
-            std::cerr << "[search] invalid JSON: " << e.what()
-                      << "\nRaw: " << result.substr(0, 300) << std::endl;
+        } catch (const json::parse_error&) {
             res.set_content("{\"results\":[]}", "application/json");
         }
     });
@@ -287,7 +265,7 @@ static void setupRoutes() {
         auto symbol = req.path_params.at("symbol");
 
         if (!isValidSymbol(symbol)) {
-            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'. Use 1-10 alphanumeric characters, dots, or hyphens.");
+            sendError(res, 400, "Invalid ticker symbol '" + symbol + "'.");
             return;
         }
 
@@ -298,7 +276,8 @@ static void setupRoutes() {
             return;
         }
 
-        std::string result = subprocess::runPython("data_fetcher.py", {"quote", symbol});
+        json argsArr = json::array({symbol});
+        std::string result = subprocess_pool::request("quote", argsArr.dump());
         if (sendJsonResult(res, result, "quote:" + symbol)) {
             Cache::instance().set(cacheKey, result, 30);
         }
@@ -317,7 +296,7 @@ static void setupRoutes() {
             return;
         }
         if (!isValidPeriod(period)) {
-            sendError(res, 400, "Invalid period '" + period + "'. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
+            sendError(res, 400, "Invalid period '" + period + "'.");
             return;
         }
 
@@ -328,7 +307,8 @@ static void setupRoutes() {
             return;
         }
 
-        std::string result = subprocess::runPython("data_fetcher.py", {"history", symbol, period});
+        json argsArr = json::array({symbol, period});
+        std::string result = subprocess_pool::request("history", argsArr.dump());
         if (sendJsonResult(res, result, "history:" + symbol + ":" + period)) {
             int ttl = (period == "1d" || period == "5d") ? 60 : 300;
             Cache::instance().set(cacheKey, result, ttl);
@@ -348,7 +328,7 @@ static void setupRoutes() {
             return;
         }
         if (!isValidPeriod(period)) {
-            sendError(res, 400, "Invalid period '" + period + "'. Allowed values: 1d, 5d, 1mo, 6mo, 1y, 5y");
+            sendError(res, 400, "Invalid period '" + period + "'.");
             return;
         }
 
@@ -359,13 +339,14 @@ static void setupRoutes() {
             return;
         }
 
-        std::string historyStr = subprocess::runPython("data_fetcher.py", {"history", symbol, period});
+        // Fetch history data (uses persistent pool)
+        json argsArr = json::array({symbol, period});
+        std::string historyStr = subprocess_pool::request("history", argsArr.dump());
 
         try {
             json historyData = json::parse(historyStr);
             if (historyData.contains("error")) {
                 std::string errMsg = historyData["error"].get<std::string>();
-                std::cerr << "[analysis:" << symbol << "] history fetch failed: " << errMsg << std::endl;
                 sendError(res, 404, "Cannot analyze " + symbol + ": " + errMsg);
                 return;
             }
@@ -376,8 +357,7 @@ static void setupRoutes() {
             Cache::instance().set(cacheKey, result, 120);
             res.set_content(result, "application/json");
         } catch (const json::parse_error& e) {
-            std::cerr << "[analysis:" << symbol << "] JSON parse error: " << e.what()
-                      << "\nRaw: " << historyStr.substr(0, 300) << std::endl;
+            std::cerr << "[analysis:" << symbol << "] JSON parse error: " << e.what() << std::endl;
             sendError(res, 502, "Failed to parse history data for analysis of " + symbol);
         } catch (const std::exception& e) {
             std::cerr << "[analysis:" << symbol << "] exception: " << e.what() << std::endl;
@@ -403,18 +383,17 @@ static void setupRoutes() {
             return;
         }
 
-        // Fetch the quote data first — validate before passing to Java
-        std::string quoteStr = subprocess::runPython("data_fetcher.py", {"quote", symbol});
+        // Fetch the quote data via persistent pool
+        json argsArr = json::array({symbol});
+        std::string quoteStr = subprocess_pool::request("quote", argsArr.dump());
         try {
             auto quoteJson = json::parse(quoteStr);
             if (quoteJson.contains("error") && !quoteJson.contains("price")) {
                 std::string errMsg = quoteJson["error"].get<std::string>();
-                std::cerr << "[interpret:" << symbol << "] quote fetch failed: " << errMsg << std::endl;
                 sendError(res, 404, "Cannot interpret " + symbol + ": " + errMsg);
                 return;
             }
-        } catch (const json::parse_error& e) {
-            std::cerr << "[interpret:" << symbol << "] quote JSON parse error: " << e.what() << std::endl;
+        } catch (const json::parse_error&) {
             sendError(res, 502, "Failed to fetch quote data for interpretation of " + symbol);
             return;
         }
@@ -422,20 +401,16 @@ static void setupRoutes() {
         std::string result = subprocess::runJava("analyzer.Interpreter", {}, quoteStr);
 
         if (!result.empty()) {
-            // Validate the Java output is proper JSON before caching
             try {
                 auto parsed = json::parse(result);
-                (void)parsed; // validate only
+                (void)parsed;
                 Cache::instance().set(cacheKey, result, 60);
                 res.set_content(result, "application/json");
-            } catch (const json::parse_error& e) {
-                std::cerr << "[interpret:" << symbol << "] Java returned invalid JSON: " << e.what()
-                          << "\nRaw: " << result.substr(0, 300) << std::endl;
+            } catch (const json::parse_error&) {
                 res.set_content("{\"insights\":[\"Interpretation temporarily unavailable.\"]}", "application/json");
             }
         } else {
-            std::cerr << "[interpret:" << symbol << "] Java returned empty output" << std::endl;
-            res.set_content("{\"insights\":[\"Interpretation unavailable — Java backend returned no data.\"]}", "application/json");
+            res.set_content("{\"insights\":[\"Interpretation unavailable.\"]}", "application/json");
         }
     });
 
@@ -457,21 +432,18 @@ static void setupRoutes() {
             return;
         }
 
-        std::string result = subprocess::runPython("news_fetcher.py", {symbol});
+        json argsArr = json::array({symbol});
+        std::string result = subprocess_pool::request("news", argsArr.dump());
 
-        // For news, always return a valid articles array
         try {
             auto parsed = json::parse(result);
             if (parsed.contains("articles")) {
                 Cache::instance().set(cacheKey, result, 300);
                 res.set_content(result, "application/json");
             } else {
-                std::cerr << "[news:" << symbol << "] unexpected format: " << result.substr(0, 200) << std::endl;
                 res.set_content("{\"articles\":[]}", "application/json");
             }
-        } catch (const json::parse_error& e) {
-            std::cerr << "[news:" << symbol << "] invalid JSON: " << e.what()
-                      << "\nRaw: " << result.substr(0, 300) << std::endl;
+        } catch (const json::parse_error&) {
             res.set_content("{\"articles\":[]}", "application/json");
         }
     });
@@ -491,15 +463,13 @@ static void setupRoutes() {
         if (!result.empty()) {
             try {
                 auto parsed = json::parse(result);
-                (void)parsed; // validate only
+                (void)parsed;
                 Cache::instance().set("glossary", result, 3600);
                 res.set_content(result, "application/json");
-            } catch (const json::parse_error& e) {
-                std::cerr << "[glossary] Java returned invalid JSON: " << e.what() << std::endl;
+            } catch (const json::parse_error&) {
                 res.set_content("{\"terms\":[]}", "application/json");
             }
         } else {
-            std::cerr << "[glossary] Java returned empty output" << std::endl;
             res.set_content("{\"terms\":[]}", "application/json");
         }
     });
@@ -507,12 +477,17 @@ static void setupRoutes() {
 
 void start(int port) {
     serverPort = port;
+
+    // Initialize the persistent Python subprocess pool
+    subprocess_pool::init();
+
     setupRoutes();
     std::cout << "Stock Analyzer server starting on http://localhost:" << port << std::endl;
     svr.listen("127.0.0.1", port);
 }
 
 void stop() {
+    subprocess_pool::shutdown();
     svr.stop();
 }
 

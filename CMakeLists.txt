@@ -17,6 +17,7 @@ set(SOURCES
     src/cpp/server.cpp
     src/cpp/analysis.cpp
     src/cpp/subprocess.cpp
+    src/cpp/subprocess_pool.cpp
     src/cpp/cache.cpp
 )
 
@@ -24,7 +25,12 @@ set(SOURCES
 add_executable(stock_analyzer ${SOURCES})
 
 # Link libraries
-target_link_libraries(stock_analyzer pthread)
+if(WIN32)
+    target_link_libraries(stock_analyzer ws2_32)
+    target_compile_definitions(stock_analyzer PRIVATE WIN32 _WIN32)
+else()
+    target_link_libraries(stock_analyzer pthread)
+endif()
 
 # Compiler flags
 target_compile_options(stock_analyzer PRIVATE -O2)

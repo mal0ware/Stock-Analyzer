@@ -53,8 +53,19 @@
     // ================================================================
 
     async function loadStockData() {
+        var sym = encodeURIComponent(currentSymbol);
+
+        // Fire ALL API calls in parallel — don't wait for quote before starting others.
+        // Each section renders independently as its data arrives.
+        var quotePromise = fetch('/api/quote/' + sym);
+        var chartPromise = fetch('/api/history/' + sym + '?period=' + currentPeriod);
+        var analysisPromise = fetch('/api/analysis/' + sym + '?period=' + currentPeriod);
+        var interpretPromise = fetch('/api/interpret/' + sym);
+        var newsPromise = fetch('/api/news/' + sym);
+
+        // Quote is critical — if it fails, show error state
         try {
-            var res = await fetch('/api/quote/' + encodeURIComponent(currentSymbol));
+            var res = await quotePromise;
 
             if (!res.ok) {
                 var errData = null;
@@ -84,18 +95,128 @@
             }
 
             showContent();
-
-            // Load remaining sections independently — each handles its own errors
-            loadChart();
-            loadAnalysis();
-            loadInterpretation();
-            loadNews();
         } catch(e) {
             console.error('[loadStockData]', e);
             showError(
                 'Failed to load data for "' + currentSymbol + '": ' + (e.message || 'Network error'),
                 'Check that the server is running. Open /api/diagnostics in your browser for details.'
             );
+            return;
+        }
+
+        // Process other responses as they arrive (already in flight)
+        handleChartResponse(chartPromise);
+        handleAnalysisResponse(analysisPromise);
+        handleInterpretResponse(interpretPromise);
+        handleNewsResponse(newsPromise);
+    }
+
+    async function handleChartResponse(promise) {
+        try {
+            var res = await promise;
+            if (!res.ok) { showChartError('Chart data failed (HTTP ' + res.status + ')'); return; }
+            var data = await res.json();
+            if (data.error) { showChartError(data.error); return; }
+            var targets = quoteData ? {
+                targetMean: quoteData.targetMeanPrice,
+                targetHigh: quoteData.targetHighPrice,
+                targetLow: quoteData.targetLowPrice
+            } : null;
+            renderChartWhenReady(data, targets);
+        } catch(e) { showChartError('Chart data unavailable: ' + (e.message || 'Network error')); }
+    }
+
+    function renderChartWhenReady(data, targets) {
+        if (typeof ChartRenderer !== 'undefined' && typeof Chart !== 'undefined') {
+            ChartRenderer.renderPriceChart('priceChart', data, currentPeriod, targets);
+            ChartRenderer.renderVolumeChart('volumeChart', data, currentPeriod);
+        } else {
+            // Chart.js not loaded yet (deferred) — wait for it
+            setTimeout(function() { renderChartWhenReady(data, targets); }, 50);
+        }
+    }
+
+    async function handleAnalysisResponse(promise) {
+        try {
+            var res = await promise;
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'Server error (HTTP ' + res.status + ')';
+                resolveLoading('technicalLoading', 'technicalContent', msg);
+                generateOverview();
+                return;
+            }
+            var data = await res.json();
+            if (data.error) { resolveLoading('technicalLoading', 'technicalContent', data.error); generateOverview(); return; }
+            analysisData = data;
+            try { renderTechnicalRating(data); } catch(err) {
+                resolveLoading('technicalLoading', 'technicalContent', 'Failed to render technical data: ' + err.message);
+            }
+            try { generateOverview(); } catch(err) {
+                resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview: ' + err.message);
+            }
+        } catch(e) {
+            resolveLoading('technicalLoading', 'technicalContent', 'Failed to load technical data: ' + (e.message || 'Network error'));
+            generateOverview();
+        }
+    }
+
+    async function handleInterpretResponse(promise) {
+        try {
+            var res = await promise;
+            if (!res.ok) {
+                var errData = null;
+                try { errData = await res.json(); } catch(e) {}
+                var msg = errData && errData.error ? errData.error : 'Interpretation failed';
+                resolveLoading('insightsLoading', 'insightList', msg);
+                return;
+            }
+            var data = await res.json();
+            var list = document.getElementById('insightList');
+            var loading = document.getElementById('insightsLoading');
+            if (!list || !loading) return;
+            if (data.insights && data.insights.length > 0) {
+                list.innerHTML = data.insights.map(function(item) {
+                    return '<div class="insight-item">' + esc(item) + '</div>';
+                }).join('');
+                loading.classList.add('hidden');
+                list.classList.remove('hidden');
+            } else {
+                loading.innerHTML = '<span class="muted">No analysis insights available for ' + esc(currentSymbol) + '</span>';
+            }
+        } catch(e) {
+            resolveLoading('insightsLoading', 'insightList', 'Failed to load analysis: ' + (e.message || 'Network error'));
+        }
+    }
+
+    async function handleNewsResponse(promise) {
+        try {
+            var res = await promise;
+            if (!res.ok) { resolveLoading('newsLoading', 'newsList', 'News fetch failed'); return; }
+            var data = await res.json();
+            var list = document.getElementById('newsList');
+            var loading = document.getElementById('newsLoading');
+            if (!list || !loading) return;
+            if (data.articles && data.articles.length > 0) {
+                list.innerHTML = data.articles.map(function(a) {
+                    var safeThumb = (a.thumbnail && /^https:\/\//.test(a.thumbnail)) ? a.thumbnail : '';
+                    var safeLink = (a.link && /^https?:\/\//.test(a.link)) ? a.link : '#';
+                    var thumb = safeThumb ? '<img class="news-thumb" src="' + esc(safeThumb) + '" alt="" loading="lazy">' : '';
+                    return '<a class="news-item" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer">' +
+                        thumb +
+                        '<div class="news-info">' +
+                        '<div class="news-title">' + esc(a.title) + '</div>' +
+                        '<div class="news-meta">' + esc(a.publisher || '') + (a.publishedAt ? ' \u2022 ' + fmtDate(a.publishedAt) : '') + '</div>' +
+                        '</div></a>';
+                }).join('');
+                loading.classList.add('hidden');
+                list.classList.remove('hidden');
+            } else {
+                loading.innerHTML = '<span class="muted">No recent news for ' + esc(currentSymbol) + '</span>';
+            }
+        } catch(e) {
+            resolveLoading('newsLoading', 'newsList', 'Failed to load news: ' + (e.message || 'Network error'));
         }
     }
 
@@ -273,53 +394,6 @@
         }
 
         return reasons.slice(0, 5);
-    }
-
-    // ================================================================
-    // Technical rating — gauge + indicators
-    // ================================================================
-
-    async function loadAnalysis() {
-        try {
-            var res = await fetch('/api/analysis/' + encodeURIComponent(currentSymbol) + '?period=' + currentPeriod);
-
-            if (!res.ok) {
-                var errData = null;
-                try { errData = await res.json(); } catch(e) {}
-                var msg = errData && errData.error ? errData.error : 'Server error (HTTP ' + res.status + ')';
-                console.error('[loadAnalysis]', msg);
-                resolveLoading('technicalLoading', 'technicalContent', msg);
-                generateOverview();
-                return;
-            }
-
-            var data = await res.json();
-            if (data.error) {
-                console.error('[loadAnalysis]', data.error);
-                resolveLoading('technicalLoading', 'technicalContent', data.error);
-                generateOverview();
-                return;
-            }
-            analysisData = data;
-
-            try { renderTechnicalRating(data); }
-            catch(err) {
-                console.error('[renderTechnicalRating]', err);
-                resolveLoading('technicalLoading', 'technicalContent', 'Failed to render technical data: ' + err.message);
-            }
-
-            try { generateOverview(); }
-            catch(err) {
-                console.error('[generateOverview]', err);
-                resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview: ' + err.message);
-            }
-
-        } catch(e) {
-            console.error('[loadAnalysis] network error:', e);
-            resolveLoading('technicalLoading', 'technicalContent', 'Failed to load technical data: ' + (e.message || 'Network error'));
-            try { generateOverview(); }
-            catch(err) { resolveLoading('overviewLoading', 'overviewContent', 'Failed to generate overview'); }
-        }
     }
 
     function renderTechnicalRating(data) {
@@ -559,89 +633,7 @@
     }
 
     // ================================================================
-    // Interpretation (Java backend)
-    // ================================================================
-
-    async function loadInterpretation() {
-        try {
-            var res = await fetch('/api/interpret/' + encodeURIComponent(currentSymbol));
-
-            if (!res.ok) {
-                var errData = null;
-                try { errData = await res.json(); } catch(e) {}
-                var msg = errData && errData.error ? errData.error : 'Interpretation failed (HTTP ' + res.status + ')';
-                console.error('[loadInterpretation]', msg);
-                resolveLoading('insightsLoading', 'insightList', msg);
-                return;
-            }
-
-            var data = await res.json();
-            var list = document.getElementById('insightList');
-            var loading = document.getElementById('insightsLoading');
-            if (!list || !loading) return;
-
-            if (data.insights && data.insights.length > 0) {
-                list.innerHTML = data.insights.map(function(item) {
-                    return '<div class="insight-item">' + esc(item) + '</div>';
-                }).join('');
-                loading.classList.add('hidden');
-                list.classList.remove('hidden');
-            } else {
-                loading.innerHTML = '<span class="muted">No analysis insights available for ' + esc(currentSymbol) + '</span>';
-            }
-        } catch(e) {
-            console.error('[loadInterpretation] network error:', e);
-            resolveLoading('insightsLoading', 'insightList', 'Failed to load analysis: ' + (e.message || 'Network error'));
-        }
-    }
-
-    // ================================================================
-    // News
-    // ================================================================
-
-    async function loadNews() {
-        try {
-            var res = await fetch('/api/news/' + encodeURIComponent(currentSymbol));
-
-            if (!res.ok) {
-                var errData = null;
-                try { errData = await res.json(); } catch(e) {}
-                var msg = errData && errData.error ? errData.error : 'News fetch failed (HTTP ' + res.status + ')';
-                console.error('[loadNews]', msg);
-                resolveLoading('newsLoading', 'newsList', msg);
-                return;
-            }
-
-            var data = await res.json();
-            var list = document.getElementById('newsList');
-            var loading = document.getElementById('newsLoading');
-            if (!list || !loading) return;
-
-            if (data.articles && data.articles.length > 0) {
-                list.innerHTML = data.articles.map(function(a) {
-                    var safeThumb = (a.thumbnail && /^https:\/\//.test(a.thumbnail)) ? a.thumbnail : '';
-                    var safeLink = (a.link && /^https?:\/\//.test(a.link)) ? a.link : '#';
-                    var thumb = safeThumb ? '<img class="news-thumb" src="' + esc(safeThumb) + '" alt="">' : '';
-                    return '<a class="news-item" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer">' +
-                        thumb +
-                        '<div class="news-info">' +
-                        '<div class="news-title">' + esc(a.title) + '</div>' +
-                        '<div class="news-meta">' + esc(a.publisher || '') + (a.publishedAt ? ' \u2022 ' + fmtDate(a.publishedAt) : '') + '</div>' +
-                        '</div></a>';
-                }).join('');
-                loading.classList.add('hidden');
-                list.classList.remove('hidden');
-            } else {
-                loading.innerHTML = '<span class="muted">No recent news for ' + esc(currentSymbol) + '</span>';
-            }
-        } catch(e) {
-            console.error('[loadNews] network error:', e);
-            resolveLoading('newsLoading', 'newsList', 'Failed to load news: ' + (e.message || 'Network error'));
-        }
-    }
-
-    // ================================================================
-    // Chart
+    // Chart — standalone loader for period switching
     // ================================================================
 
     async function loadChart() {
@@ -649,32 +641,20 @@
             var res = await fetch('/api/history/' + encodeURIComponent(currentSymbol) + '?period=' + currentPeriod);
 
             if (!res.ok) {
-                var errData = null;
-                try { errData = await res.json(); } catch(e) {}
-                var msg = errData && errData.error ? errData.error : 'Chart data failed (HTTP ' + res.status + ')';
-                console.error('[loadChart]', msg);
-                showChartError(msg);
+                showChartError('Chart data failed (HTTP ' + res.status + ')');
                 return;
             }
 
             var data = await res.json();
-            if (data.error) {
-                console.error('[loadChart]', data.error);
-                showChartError(data.error);
-                return;
-            }
+            if (data.error) { showChartError(data.error); return; }
 
             var targets = quoteData ? {
                 targetMean: quoteData.targetMeanPrice,
                 targetHigh: quoteData.targetHighPrice,
                 targetLow: quoteData.targetLowPrice
             } : null;
-            if (typeof ChartRenderer !== 'undefined') {
-                ChartRenderer.renderPriceChart('priceChart', data, currentPeriod, targets);
-                ChartRenderer.renderVolumeChart('volumeChart', data, currentPeriod);
-            }
+            renderChartWhenReady(data, targets);
         } catch(e) {
-            console.error('[loadChart] network error:', e);
             showChartError('Chart data unavailable: ' + (e.message || 'Network error'));
         }
     }

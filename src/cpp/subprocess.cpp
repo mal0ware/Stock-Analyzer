@@ -5,15 +5,20 @@
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
+#include <vector>
+#include <filesystem>
+#include <cstring>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
 #include <sys/wait.h>
 #include <poll.h>
-#include <cstring>
-#include <vector>
-#include <filesystem>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <climits>
+#endif
 #endif
 
 namespace subprocess {
@@ -22,8 +27,15 @@ static std::string basePath;
 
 std::string getBasePath() {
     if (basePath.empty()) {
+#ifdef _WIN32
+        char buf[MAX_PATH];
+        DWORD len = GetModuleFileNameA(NULL, buf, sizeof(buf));
+        if (len > 0 && len < sizeof(buf)) {
+            std::string exePath(buf);
+            basePath = exePath.substr(0, exePath.find_last_of('\\'));
+        }
+#elif defined(__APPLE__)
         char buf[4096];
-#ifdef __APPLE__
         uint32_t size = sizeof(buf);
         if (_NSGetExecutablePath(buf, &size) == 0) {
             char resolved[PATH_MAX];
@@ -33,6 +45,7 @@ std::string getBasePath() {
             }
         }
 #else
+        char buf[4096];
         ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
         if (len != -1) {
             buf[len] = '\0';
@@ -72,8 +85,140 @@ static std::string sanitizeForJson(const std::string& s) {
     return out;
 }
 
+#ifdef _WIN32
 // ================================================================
-// Safe subprocess execution using fork/execvp (OWASP A03:2021)
+// Windows subprocess execution using CreateProcess
+// ================================================================
+std::string run(const std::string& executable, const std::vector<std::string>& args, const std::string& input) {
+    // Build command line string
+    std::string cmdLine = "\"" + executable + "\"";
+    for (const auto& arg : args) {
+        cmdLine += " \"" + arg + "\"";
+    }
+
+    // Create pipes for stdout and stderr
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityAttributes = NULL;
+
+    HANDLE stdoutRead = NULL, stdoutWrite = NULL;
+    HANDLE stderrRead = NULL, stderrWrite = NULL;
+    HANDLE stdinRead = NULL, stdinWrite = NULL;
+
+    if (!CreatePipe(&stdoutRead, &stdoutWrite, &sa, 0)) {
+        return "{\"error\":\"Failed to create stdout pipe\"}";
+    }
+    SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0);
+
+    if (!CreatePipe(&stderrRead, &stderrWrite, &sa, 0)) {
+        CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
+        return "{\"error\":\"Failed to create stderr pipe\"}";
+    }
+    SetHandleInformation(stderrRead, HANDLE_FLAG_INHERIT, 0);
+
+    if (!input.empty()) {
+        if (!CreatePipe(&stdinRead, &stdinWrite, &sa, 0)) {
+            CloseHandle(stdoutRead); CloseHandle(stdoutWrite);
+            CloseHandle(stderrRead); CloseHandle(stderrWrite);
+            return "{\"error\":\"Failed to create stdin pipe\"}";
+        }
+        SetHandleInformation(stdinWrite, HANDLE_FLAG_INHERIT, 0);
+    }
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = stdoutWrite;
+    si.hStdError = stderrWrite;
+    si.hStdInput = stdinRead ? stdinRead : GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION pi = {};
+
+    // Clear environment variables that interfere with Python imports
+    SetEnvironmentVariableA("VIRTUAL_ENV", NULL);
+    SetEnvironmentVariableA("CONDA_PREFIX", NULL);
+    SetEnvironmentVariableA("CONDA_DEFAULT_ENV", NULL);
+    SetEnvironmentVariableA("CONDA_SHLVL", NULL);
+    SetEnvironmentVariableA("PYTHONHOME", NULL);
+    SetEnvironmentVariableA("PYTHONPATH", NULL);
+
+    BOOL ok = CreateProcessA(
+        NULL,
+        const_cast<char*>(cmdLine.c_str()),
+        NULL, NULL, TRUE,
+        CREATE_NO_WINDOW,
+        NULL, NULL,
+        &si, &pi
+    );
+
+    // Close write ends in parent
+    CloseHandle(stdoutWrite);
+    CloseHandle(stderrWrite);
+    if (stdinRead) CloseHandle(stdinRead);
+
+    if (!ok) {
+        CloseHandle(stdoutRead);
+        CloseHandle(stderrRead);
+        if (stdinWrite) CloseHandle(stdinWrite);
+        DWORD err = GetLastError();
+        return "{\"error\":\"Failed to create process (error " + std::to_string(err) + ")\"}";
+    }
+
+    // Write stdin data
+    if (!input.empty() && stdinWrite) {
+        DWORD written;
+        WriteFile(stdinWrite, input.c_str(), (DWORD)input.size(), &written, NULL);
+        CloseHandle(stdinWrite);
+    }
+
+    // Read stdout and stderr
+    std::string output, stderrOutput;
+    char buf[4096];
+    DWORD bytesRead;
+
+    // Read stdout
+    while (ReadFile(stdoutRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        buf[bytesRead] = '\0';
+        output += buf;
+    }
+
+    // Read stderr
+    while (ReadFile(stderrRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        buf[bytesRead] = '\0';
+        stderrOutput += buf;
+    }
+
+    CloseHandle(stdoutRead);
+    CloseHandle(stderrRead);
+
+    // Wait for process to exit
+    WaitForSingleObject(pi.hProcess, 10000); // 10s timeout
+
+    DWORD exitCode;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    if (!stderrOutput.empty()) {
+        std::cerr << "[subprocess:" << executable << "] stderr: "
+                  << stderrOutput.substr(0, 1000) << std::endl;
+    }
+
+    if (exitCode != 0 && output.empty()) {
+        std::string errMsg = stderrOutput.empty()
+            ? "Process exited with code " + std::to_string(exitCode)
+            : sanitizeForJson(stderrOutput.substr(0, 300));
+        return "{\"error\":\"" + errMsg + "\"}";
+    }
+
+    return output;
+}
+
+#else
+// ================================================================
+// POSIX subprocess execution using fork/execvp (OWASP A03:2021)
 //
 // Stdout and stderr are captured on SEPARATE pipes so that
 // warnings or error messages on stderr never corrupt the JSON
@@ -137,13 +282,6 @@ std::string run(const std::string& executable, const std::vector<std::string>& a
         }
 
         // Clear environment variables that interfere with Python imports.
-        // VIRTUAL_ENV and CONDA_PREFIX cause Python to modify sys.path,
-        // which can make numpy (and other C extensions) try to import from
-        // the wrong location — e.g., "you should not try to import numpy
-        // from its source directory". This happens when the app is launched
-        // from a shell that has a virtualenv or conda env activated.
-        // __PYVENV_LAUNCHER__ is a macOS-specific variable set by framework
-        // Python launchers that can redirect sys.prefix.
         unsetenv("VIRTUAL_ENV");
         unsetenv("CONDA_PREFIX");
         unsetenv("CONDA_DEFAULT_ENV");
@@ -185,8 +323,6 @@ std::string run(const std::string& executable, const std::vector<std::string>& a
     }
 
     // Read stdout and stderr concurrently using poll() to avoid deadlock.
-    // If we read only stdout first and the stderr buffer fills, the child
-    // blocks on stderr write and never closes stdout — deadlock.
     std::string output;
     std::string stderrOutput;
     char buf[4096];
@@ -259,15 +395,40 @@ std::string run(const std::string& executable, const std::vector<std::string>& a
 
     return output;
 }
+#endif
 
 // ================================================================
 // Executable discovery — finds Python/Java in known safe locations
 // ================================================================
 static std::string findExecutable(const std::string& name) {
-    std::string home = getenv("HOME") ? getenv("HOME") : "";
+    std::string home;
+#ifdef _WIN32
+    const char* userprofile = getenv("USERPROFILE");
+    home = userprofile ? userprofile : "";
+#else
+    const char* homeEnv = getenv("HOME");
+    home = homeEnv ? homeEnv : "";
+#endif
     std::string base = getBasePath();
     std::vector<std::string> candidates;
 
+#ifdef _WIN32
+    if (name == "java") {
+        candidates.push_back(base + "\\jre\\bin\\java.exe");
+        if (!home.empty()) {
+            candidates.push_back(home + "\\.local\\jdk\\bin\\java.exe");
+        }
+        candidates.push_back("C:\\Program Files\\Java\\jdk-21\\bin\\java.exe");
+        candidates.push_back("C:\\Program Files\\Eclipse Adoptium\\jre-21\\bin\\java.exe");
+    } else if (name == "python3") {
+        candidates.push_back(base + "\\python-env\\python.exe");
+        candidates.push_back(base + "\\python-env\\python3.exe");
+        if (!home.empty()) {
+            candidates.push_back(home + "\\AppData\\Local\\Programs\\Python\\Python313\\python.exe");
+            candidates.push_back(home + "\\AppData\\Local\\Programs\\Python\\Python312\\python.exe");
+        }
+    }
+#else
     if (name == "java") {
         // Bundled JRE first (inside .app bundle or alongside the binary)
         candidates.push_back(base + "/jre/bin/java");
@@ -284,8 +445,6 @@ static std::string findExecutable(const std::string& name) {
         // Bundled Python first (inside .app bundle or alongside the binary)
         candidates.push_back(base + "/python-env/bin/python3");
         // macOS Homebrew — where pip packages (yfinance) get installed.
-        // The system /usr/bin/python3 on macOS is Xcode's bare Python which does NOT
-        // have user-installed packages, so it must be checked LAST.
         candidates.push_back("/opt/homebrew/bin/python3");
         if (!home.empty()) {
             candidates.push_back(home + "/.local/bin/python3");
@@ -293,6 +452,7 @@ static std::string findExecutable(const std::string& name) {
         candidates.push_back("/usr/local/bin/python3");
         candidates.push_back("/usr/bin/python3");
     }
+#endif
 
     for (auto& c : candidates) {
         if (std::filesystem::exists(c)) return c;
@@ -308,6 +468,15 @@ std::string runPython(const std::string& script, const std::vector<std::string>&
     if (!std::filesystem::exists(path)) {
         path = getBasePath() + "/../src/python/" + script;
     }
+#ifdef _WIN32
+    // Also check with backslashes on Windows
+    if (!std::filesystem::exists(path)) {
+        path = getBasePath() + "\\python\\" + script;
+    }
+    if (!std::filesystem::exists(path)) {
+        path = getBasePath() + "\\..\\src\\python\\" + script;
+    }
+#endif
 
     if (!std::filesystem::exists(path)) {
         std::cerr << "[runPython] Script not found: " << path
@@ -324,11 +493,6 @@ std::string runPython(const std::string& script, const std::vector<std::string>&
 
 #if defined(__APPLE__) && defined(__aarch64__)
     // On Apple Silicon, force arm64 architecture for universal system Python
-    // binaries. Without this, Python may run as x86_64 if any ancestor in the
-    // process tree was x86_64 (e.g., VS Code or Rosetta terminal), causing
-    // arm64-only C extensions like numpy to fail with "incompatible architecture".
-    // Bundled Python (inside getBasePath()) is already native arm64 and does
-    // not need the arch wrapper.
     bool isBundled = python.rfind(getBasePath(), 0) == 0;
     if (!isBundled) {
         std::vector<std::string> fullArgs = {"-arm64", python, path};
@@ -349,6 +513,14 @@ std::string runJava(const std::string& className, const std::vector<std::string>
     if (!std::filesystem::exists(classPath + "/analyzer")) {
         classPath = getBasePath() + "/../build/java";
     }
+#ifdef _WIN32
+    if (!std::filesystem::exists(classPath + "/analyzer")) {
+        classPath = getBasePath() + "\\java";
+    }
+    if (!std::filesystem::exists(classPath + "\\analyzer")) {
+        classPath = getBasePath() + "\\..\\build\\java";
+    }
+#endif
 
     std::string java = findExecutable("java");
     std::vector<std::string> fullArgs = {"-cp", classPath, className};
