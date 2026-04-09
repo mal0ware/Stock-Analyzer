@@ -29,11 +29,12 @@ function getBackendDir() {
 
 function startServer() {
     const backendDir = getBackendDir();
-    const binaryName = IS_WIN ? 'stock_analyzer.exe' : 'stock_analyzer';
-    const serverPath = path.join(backendDir, binaryName);
+    const nativeBinary = IS_WIN ? 'stock_analyzer.exe' : 'stock_analyzer';
+    const nativePath = path.join(backendDir, nativeBinary);
+    const pyinstallerExe = IS_WIN ? 'market-analyst-api.exe' : 'market-analyst-api';
+    const pyinstallerPath = path.join(backendDir, 'market-analyst-api', pyinstallerExe);
     const hasFastAPI = fs.existsSync(path.join(backendDir, 'api', 'main.py'));
 
-    console.log('Starting backend:', serverPath);
     console.log('Backend dir:', backendDir);
 
     // Build a clean environment — remove Python/conda variables that
@@ -61,16 +62,26 @@ function startServer() {
     }
     cleanEnv.PATH = extraPaths.join(PATH_SEP) + PATH_SEP + (cleanEnv.PATH || '');
 
-    // Decide which backend to launch
-    if (fs.existsSync(serverPath)) {
+    // Decide which backend to launch (in priority order)
+    if (fs.existsSync(nativePath)) {
         // Native C++ backend
-        serverProcess = spawn(serverPath, ['--headless'], {
+        console.log('Starting native backend:', nativePath);
+        serverProcess = spawn(nativePath, ['--headless'], {
             cwd: backendDir,
             env: cleanEnv,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
+    } else if (fs.existsSync(pyinstallerPath)) {
+        // PyInstaller-bundled FastAPI backend (self-contained, no runtime deps)
+        console.log('Starting PyInstaller backend:', pyinstallerPath);
+        serverProcess = spawn(pyinstallerPath, [], {
+            cwd: path.join(backendDir, 'market-analyst-api'),
+            env: cleanEnv,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
     } else if (hasFastAPI) {
-        // FastAPI Python backend fallback (Windows without native binary)
+        // FastAPI via bundled Python (last resort)
+        console.log('Starting FastAPI backend via bundled Python');
         const pythonExe = IS_WIN
             ? path.join(backendDir, 'python-env', 'python.exe')
             : path.join(backendDir, 'python-env', 'bin', 'python3');
@@ -86,7 +97,9 @@ function startServer() {
             stdio: ['ignore', 'pipe', 'pipe'],
         });
     } else {
-        console.error('No backend found! Neither stock_analyzer nor api/main.py exists in', backendDir);
+        console.error('No backend found in', backendDir);
+        console.error('  Checked: ', nativePath);
+        console.error('  Checked: ', pyinstallerPath);
         return;
     }
 

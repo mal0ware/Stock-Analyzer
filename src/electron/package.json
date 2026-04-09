@@ -53,6 +53,20 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "bundled/market-analyst-api",
+        "to": "backend/market-analyst-api",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "bundled/api",
+        "to": "backend/api",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "afterPack": "./afterPack.js",

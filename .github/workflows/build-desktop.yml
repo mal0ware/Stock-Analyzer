@@ -64,19 +64,8 @@ jobs:
       - name: Install Python dependencies
         run: pip install pyinstaller && pip install -r api/requirements.txt
 
-      - name: Build Python sidecar (Unix)
-        if: matrix.platform != 'windows-latest'
-        run: |
-          pyinstaller --name market-analyst-api \
-            api/main.py \
-            --add-data "api:api" \
-            --add-data "ml:ml" \
-            --add-data "frontend/dist:frontend-dist"
-
-      - name: Build Python sidecar (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          pyinstaller --name market-analyst-api api/main.py --add-data "api;api" --add-data "ml;ml" --add-data "frontend/dist;frontend-dist"
+      - name: Build Python sidecar
+        run: pyinstaller market-analyst-api.spec --noconfirm
 
       - name: Copy sidecar to Tauri resources
         shell: bash

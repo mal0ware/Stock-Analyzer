@@ -228,19 +228,66 @@ echo "  JRE bundle: $JRE_SIZE"
 echo ""
 
 # ------------------------------------------------------------------
-# Stage 5: Prepare Windows-specific Electron main.js
+# Stage 5: Build PyInstaller backend (self-contained .exe)
 # ------------------------------------------------------------------
-echo "[5/8] Preparing Windows Electron configuration..."
+echo "[5/8] Building PyInstaller backend..."
 
-# Copy the API backend files for the Python fallback
+# PyInstaller must run on Windows Python to produce a Windows exe.
+# From WSL2, we invoke the Windows Python via the bundled standalone build.
+PYINST_PYTHON="$BUNDLED_DIR/python-env/python.exe"
+PYINST_OUTPUT="$BUNDLED_DIR/market-analyst-api"
+
+if [ -f "$PYINST_PYTHON" ]; then
+    # Install PyInstaller into the bundled Windows Python
+    echo "  Installing PyInstaller into Windows Python bundle..."
+    SITE_PKGS=$(find "$BUNDLED_DIR/python-env" -type d -name "site-packages" 2>/dev/null | head -1)
+    if [ -z "$SITE_PKGS" ]; then
+        SITE_PKGS="$BUNDLED_DIR/python-env/Lib/site-packages"
+        mkdir -p "$SITE_PKGS"
+    fi
+
+    # Install PyInstaller + all backend deps into the Windows Python
+    python3 -m pip install pyinstaller --target "$SITE_PKGS" --quiet 2>&1 | tail -2 || true
+    python3 -m pip install -r "$PROJECT_DIR/api/requirements.txt" --target "$SITE_PKGS" --quiet 2>&1 | tail -2 || true
+
+    # Build the frontend so it can be bundled into the backend
+    echo "  Building frontend for embedding..."
+    if [ -d "$PROJECT_DIR/frontend" ] && [ -f "$PROJECT_DIR/frontend/package.json" ]; then
+        (cd "$PROJECT_DIR/frontend" && npm install --quiet 2>&1 | tail -1 && npm run build --quiet 2>&1 | tail -1) || true
+    fi
+
+    # Run PyInstaller via the Windows Python (works from WSL2 with interop)
+    echo "  Running PyInstaller..."
+    cd "$PROJECT_DIR"
+    "$PYINST_PYTHON" -m PyInstaller market-analyst-api.spec \
+        --distpath "$BUNDLED_DIR" \
+        --workpath "$PROJECT_DIR/build/pyinstaller-work" \
+        --noconfirm 2>&1 | tail -10
+
+    if [ -d "$PYINST_OUTPUT" ] && [ -f "$PYINST_OUTPUT/market-analyst-api.exe" ]; then
+        echo "  PyInstaller build succeeded."
+        USE_PYTHON_BACKEND=false
+    else
+        echo "  PyInstaller build failed — falling back to bundled Python + source."
+        USE_PYTHON_BACKEND=true
+    fi
+else
+    echo "  Windows Python not available for PyInstaller. Using source fallback."
+    USE_PYTHON_BACKEND=true
+fi
+
+# If PyInstaller failed, bundle the raw API source as a fallback
 if [ "$USE_PYTHON_BACKEND" = true ]; then
+    echo "  Bundling API source as fallback..."
     mkdir -p "$BUNDLED_DIR/api"
-    cp "$PROJECT_DIR/api/main.py" "$BUNDLED_DIR/api/"
-    cp "$PROJECT_DIR/api/analysis.py" "$BUNDLED_DIR/api/"
-    cp "$PROJECT_DIR/api/interpreter.py" "$BUNDLED_DIR/api/"
-    cp "$PROJECT_DIR/api/glossary.py" "$BUNDLED_DIR/api/"
+    cp -r "$PROJECT_DIR/api/"*.py "$BUNDLED_DIR/api/"
+    cp -r "$PROJECT_DIR/api/routes" "$BUNDLED_DIR/api/routes" 2>/dev/null || true
+    cp -r "$PROJECT_DIR/api/db" "$BUNDLED_DIR/api/db" 2>/dev/null || true
+    cp -r "$PROJECT_DIR/api/ingestion" "$BUNDLED_DIR/api/ingestion" 2>/dev/null || true
+    cp -r "$PROJECT_DIR/ml" "$BUNDLED_DIR/api/ml" 2>/dev/null || true
     cp "$PROJECT_DIR/api/requirements.txt" "$BUNDLED_DIR/api/"
-    echo "  Bundled FastAPI backend as fallback."
+    # Install all backend deps into bundled Python
+    python3 -m pip install -r "$PROJECT_DIR/api/requirements.txt" --target "$SITE_PKGS" --quiet 2>&1 | tail -2 || true
 fi
 
 echo "  Done."
@@ -263,6 +310,9 @@ if [ -f "$PROJECT_DIR/build/stock_analyzer.exe" ]; then
 fi
 chmod -R u+rwX "$BUNDLED_DIR/python-env"
 chmod -R u+rwX "$BUNDLED_DIR/jre"
+if [ -d "$BUNDLED_DIR/market-analyst-api" ]; then
+    chmod -R u+rwX "$BUNDLED_DIR/market-analyst-api"
+fi
 echo "  Done."
 echo ""
 

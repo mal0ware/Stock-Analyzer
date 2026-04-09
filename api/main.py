@@ -499,3 +499,8 @@ else:
     if _v1_frontend.is_dir():
         app.mount("/", StaticFiles(directory=str(_v1_frontend), html=True), name="frontend")
         log.info("v1_frontend_mounted", path=str(_v1_frontend))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8089, log_level="warning")
