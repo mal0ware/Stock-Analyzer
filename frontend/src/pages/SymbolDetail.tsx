@@ -99,11 +99,53 @@ export default function SymbolDetail() {
   const changePct = liveData?.change_pct ?? q.changePercent;
   const change = q.change;
 
-  const chartData = hist.dates.map((d, i) => ({
+  const qAny = q as any;
+  const targetMean = qAny.targetMeanPrice;
+  const targetHigh = qAny.targetHighPrice;
+  const targetLow = qAny.targetLowPrice;
+  const showForecast = targetMean && targetHigh && targetLow
+    && ['1mo', '6mo', '1y', '5y'].includes(period);
+
+  const baseChartData = hist.dates.map((d, i) => ({
     date: d,
     close: hist.closes[i],
     volume: hist.volumes[i],
+    forecastMean: null as number | null,
+    forecastHigh: null as number | null,
+    forecastLow: null as number | null,
   }));
+
+  // Add forecast projection points
+  if (showForecast) {
+    const lastPrice = hist.closes[hist.closes.length - 1];
+    const lastDate = new Date(hist.dates[hist.dates.length - 1]);
+    const numPoints = Math.max(Math.round(hist.dates.length * 0.25), 5);
+
+    // Connect forecast to last real data point
+    baseChartData[baseChartData.length - 1].forecastMean = lastPrice;
+    baseChartData[baseChartData.length - 1].forecastHigh = lastPrice;
+    baseChartData[baseChartData.length - 1].forecastLow = lastPrice;
+
+    for (let i = 1; i <= numPoints; i++) {
+      const d = new Date(lastDate);
+      if (period === '5y') d.setDate(d.getDate() + i * 30);
+      else if (period === '1y') d.setDate(d.getDate() + i * 7);
+      else if (period === '6mo') d.setDate(d.getDate() + i * 5);
+      else d.setDate(d.getDate() + i * 2);
+
+      const t = i / numPoints;
+      baseChartData.push({
+        date: d.toISOString().slice(0, 10),
+        close: null as any,
+        volume: null as any,
+        forecastMean: lastPrice + (targetMean - lastPrice) * t,
+        forecastHigh: lastPrice + (targetHigh - lastPrice) * t,
+        forecastLow: lastPrice + (targetLow - lastPrice) * t,
+      });
+    }
+  }
+
+  const chartData = baseChartData;
 
   const metaParts = [q.exchange, q.sector, q.industry].filter(Boolean);
   const desc = (q as any).description || '';
@@ -190,15 +232,31 @@ export default function SymbolDetail() {
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
                 <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
+              <linearGradient id="forecastFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#00b464" stopOpacity={0.06} />
+                <stop offset="100%" stopColor="#00b464" stopOpacity={0} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2235" />
             <XAxis dataKey="date" tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis domain={['auto', 'auto']} tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
             <Tooltip contentStyle={{ background: '#131620', border: '1px solid #1e2235', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
               labelStyle={{ color: '#8b8fa3' }} itemStyle={{ color: '#e5e7eb' }} />
-            <Area type="monotone" dataKey="close" stroke="#3b82f6" fill="url(#priceGradient)" strokeWidth={2} dot={false} />
+            <Area type="monotone" dataKey="close" stroke="#3b82f6" fill="url(#priceGradient)" strokeWidth={2} dot={false} connectNulls={false} />
+            {showForecast && <>
+              <Area type="monotone" dataKey="forecastHigh" stroke="rgba(0,180,100,0.4)" fill="url(#forecastFill)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls={false} name="Forecast High" />
+              <Area type="monotone" dataKey="forecastLow" stroke="rgba(255,107,107,0.4)" fill="none" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls={false} name="Forecast Low" />
+              <Area type="monotone" dataKey="forecastMean" stroke="#3b82f6" fill="none" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls={false} name="Target" />
+            </>}
           </AreaChart>
         </ResponsiveContainer>
+        {showForecast && (
+          <div className="flex items-center gap-4 mt-2 ml-14 text-[11px] text-gray-500">
+            <span className="flex items-center gap-1.5"><span className="w-4 h-0 border-t-2 border-dashed border-blue-500 inline-block" /> Target ${fmt(targetMean)}</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 h-0 border-t border-dashed border-emerald-500/50 inline-block" /> High ${fmt(targetHigh)}</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 h-0 border-t border-dashed border-red-400/50 inline-block" /> Low ${fmt(targetLow)}</span>
+          </div>
+        )}
       </div>
 
       {/* Volume chart */}
