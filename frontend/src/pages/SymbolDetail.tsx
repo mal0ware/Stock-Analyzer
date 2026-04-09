@@ -5,7 +5,7 @@ import {
   BarChart, Bar, CartesianGrid,
 } from 'recharts';
 import * as api from '../lib/api';
-import { formatPct, formatLargeNumber, pctColor } from '../lib/format';
+import { formatLargeNumber, pctColor } from '../lib/format';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const PERIODS = ['1d', '5d', '1mo', '6mo', '1y', '5y'] as const;
@@ -726,7 +726,7 @@ function TechRow({ label, value, signal }: { label: string; value: string; signa
   );
 }
 
-function DetailSkeleton({ symbol }: { symbol?: string }) {
+function DetailSkeleton(_props: { symbol?: string }) {
   return (
     <div className="space-y-6">
       <div>
