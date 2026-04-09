@@ -71,16 +71,19 @@ function handleLinux(context) {
 
 function handleWindows(context) {
     const resourcesDir = path.join(context.appOutDir, 'resources');
+    const backendDir = path.join(resourcesDir, 'backend');
 
-    // Check if we have a native .exe backend or need the Python fallback
-    const nativeBackend = path.join(resourcesDir, 'backend', 'stock_analyzer.exe');
-    const apiDir = path.join(resourcesDir, 'backend', 'api');
+    const nativeBackend = path.join(backendDir, 'stock_analyzer.exe');
+    const pyinstallerBackend = path.join(backendDir, 'market-analyst-api', 'market-analyst-api.exe');
+    const apiDir = path.join(backendDir, 'api');
 
     if (fs.existsSync(nativeBackend)) {
         console.log('  • afterPack: native Windows backend found');
+    } else if (fs.existsSync(pyinstallerBackend)) {
+        console.log('  • afterPack: PyInstaller backend found');
     } else if (fs.existsSync(apiDir)) {
         // Write a launcher script that starts the FastAPI backend using bundled Python
-        const launcher = path.join(resourcesDir, 'backend', 'start-backend.bat');
+        const launcher = path.join(backendDir, 'start-backend.bat');
         const script = `@echo off
 set SCRIPT_DIR=%~dp0
 set PATH=%SCRIPT_DIR%python-env;%SCRIPT_DIR%python-env\\Scripts;%SCRIPT_DIR%jre\\bin;%PATH%
@@ -89,6 +92,8 @@ cd /d "%SCRIPT_DIR%api"
 `;
         fs.writeFileSync(launcher, script);
         console.log('  • afterPack: wrote start-backend.bat for FastAPI fallback');
+    } else {
+        console.warn('  • afterPack: WARNING — no Windows backend found!');
     }
 
     console.log('  • afterPack: Windows post-processing complete');

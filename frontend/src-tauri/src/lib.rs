@@ -6,7 +6,7 @@ use tauri::Manager;
 
 /// Check if the backend is accepting connections on port 8080.
 fn backend_ready() -> bool {
-    TcpStream::connect_timeout(&"127.0.0.1:8080".parse().unwrap(), Duration::from_secs(1))
+    TcpStream::connect_timeout(&"127.0.0.1:8089".parse().unwrap(), Duration::from_secs(1))
         .is_ok()
 }
 
@@ -94,7 +94,7 @@ pub fn run() {
                     if backend_ready() {
                         std::thread::sleep(Duration::from_millis(200));
                         let _ =
-                            window.eval("window.location.replace('http://localhost:8080')");
+                            window.eval("window.location.replace('http://localhost:8089')");
                         return;
                     }
                     std::thread::sleep(Duration::from_millis(500));
