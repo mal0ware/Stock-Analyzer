@@ -502,5 +502,15 @@ else:
 
 
 if __name__ == "__main__":
+    import sys
+    import os
     import uvicorn
+
+    # When running as a PyInstaller --noconsole exe, sys.stdout/stderr are None
+    # which crashes uvicorn's logging (isatty() on None). Redirect to devnull.
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
     uvicorn.run(app, host="127.0.0.1", port=8089, log_level="warning")
