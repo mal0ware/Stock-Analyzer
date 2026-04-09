@@ -70,7 +70,7 @@ jobs:
       - name: Copy sidecar to Tauri resources
         shell: bash
         run: |
-          mkdir -p frontend/src-tauri/resources
+          rm -rf frontend/src-tauri/resources/sidecar
           cp -r dist/market-analyst-api frontend/src-tauri/resources/sidecar
           # Ensure the binary is executable (Unix)
           if [[ "${{ matrix.platform }}" != "windows-latest" ]]; then
