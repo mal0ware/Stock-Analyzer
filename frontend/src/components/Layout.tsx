@@ -57,7 +57,7 @@ export default function Layout() {
       <header className="bg-[#0d1017]/90 backdrop-blur-md border-b border-[#1e2235] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-6">
           <NavLink to="/" className="text-lg font-semibold text-white whitespace-nowrap tracking-tight">
-            AI Market Analyst
+            Stock Analyzer
           </NavLink>
 
           <nav className="hidden sm:flex gap-1">

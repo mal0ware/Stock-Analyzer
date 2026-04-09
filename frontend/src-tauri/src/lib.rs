@@ -4,6 +4,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Manager;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 fn backend_ready() -> bool {
     TcpStream::connect_timeout(&"127.0.0.1:8089".parse().unwrap(), Duration::from_secs(1))
         .is_ok()
@@ -48,7 +51,7 @@ document.documentElement.innerHTML = `
   @keyframes spin { to { transform: rotate(360deg); } }
 </style></head>
 <body>
-  <h1>AI Market Analyst</h1>
+  <h1>Stock Analyzer</h1>
   <div class="spinner"></div>
   <p>Starting up…</p>
 </body>`;
@@ -90,9 +93,14 @@ pub fn run() {
 
             // Launch the Python backend from its own directory so PyInstaller
             // --onedir can find _internal/ and all shared libraries.
-            match Command::new(&sidecar_exe)
-                .current_dir(&sidecar_dir)
-                .spawn()
+            let mut cmd = Command::new(&sidecar_exe);
+            cmd.current_dir(&sidecar_dir);
+
+            // Prevent a console window from flashing on Windows.
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+            match cmd.spawn()
             {
                 Ok(child) => {
                     app.manage(Backend(Mutex::new(Some(child))));

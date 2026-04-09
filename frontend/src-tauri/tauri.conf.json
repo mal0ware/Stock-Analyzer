@@ -6,13 +6,13 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
-  "productName": "AI Market Analyst",
+  "productName": "Stock Analyzer",
   "version": "1.1.0",
-  "identifier": "com.stockanalyzer.market-analyst",
+  "identifier": "com.stockanalyzer.app",
   "app": {
     "windows": [
       {
-        "title": "AI Market Analyst",
+        "title": "Stock Analyzer",
         "url": "about:blank",
         "width": 1320,
         "height": 880,

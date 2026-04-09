@@ -86,9 +86,9 @@ jobs:
           tauriScript: npx tauri
           args: ${{ matrix.tauri_args }}
           tagName: ${{ github.ref_name }}
-          releaseName: 'AI Market Analyst ${{ github.ref_name }}'
+          releaseName: 'Stock Analyzer ${{ github.ref_name }}'
           releaseBody: |
-            ## AI Market Analyst ${{ github.ref_name }}
+            ## Stock Analyzer ${{ github.ref_name }}
 
             Download the installer for your platform:
 

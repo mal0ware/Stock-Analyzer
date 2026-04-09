@@ -29,6 +29,12 @@ export const search = (q: string) => get<{ results: SearchResult[] }>(`${BASE}/s
 export const quote = (symbol: string) => get<QuoteData>(`${BASE}/quote/${symbol}`);
 export const history = (symbol: string, period = '1mo') =>
   get<HistoryData>(`${BASE}/history/${symbol}?period=${period}`);
+export const analysis = (symbol: string, period = '1mo') =>
+  get<AnalysisData>(`${BASE}/analysis/${symbol}?period=${period}`);
+export const interpret = (symbol: string) =>
+  get<{ insights: string[] }>(`${BASE}/interpret/${symbol}`);
+export const news = (symbol: string) =>
+  get<{ articles: NewsArticle[] }>(`${BASE}/news/${symbol}`);
 
 // v2 endpoints
 export const snapshot = (symbol: string) => get<SnapshotData>(`${V2}/symbols/${symbol}/snapshot`);
@@ -144,4 +150,24 @@ export interface MarketOverviewData {
 export interface WatchlistData {
   symbols: { symbol: string; added_at: string }[];
   count: number;
+}
+
+export interface AnalysisData {
+  trend: string;
+  currentRsi: number | null;
+  volatility: number | null;
+  periodReturn: number | null;
+  macd?: { histogram: number[] };
+  supportResistance?: { support: number; resistance: number };
+  sma20?: number[];
+  sma50?: number[];
+  [key: string]: unknown;
+}
+
+export interface NewsArticle {
+  title: string;
+  link: string;
+  publisher: string;
+  publishedAt?: string;
+  thumbnail?: string;
 }
