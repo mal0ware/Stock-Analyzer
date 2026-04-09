@@ -4,13 +4,11 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Manager;
 
-/// Check if the backend is accepting connections on port 8080.
 fn backend_ready() -> bool {
     TcpStream::connect_timeout(&"127.0.0.1:8089".parse().unwrap(), Duration::from_secs(1))
         .is_ok()
 }
 
-/// Holds the backend child process so it's killed when the app exits.
 struct Backend(Mutex<Option<Child>>);
 
 impl Drop for Backend {
@@ -21,7 +19,6 @@ impl Drop for Backend {
     }
 }
 
-/// Inline loading splash shown instantly while the backend starts.
 const LOADING_HTML: &str = r#"
 document.documentElement.innerHTML = `
 <head><style>
@@ -46,6 +43,8 @@ document.documentElement.innerHTML = `
     animation: spin 0.8s linear infinite;
   }
   p { color: #64748b; font-size: 14px; }
+  .error { color: #ef4444; font-size: 13px; max-width: 600px; text-align: center;
+           white-space: pre-wrap; word-break: break-all; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style></head>
 <body>
@@ -55,10 +54,26 @@ document.documentElement.innerHTML = `
 </body>`;
 "#;
 
+fn show_error(window: &tauri::WebviewWindow, msg: &str) {
+    let escaped = msg.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
+    let _ = window.eval(&format!(
+        "document.querySelector('.spinner').style.display='none';\
+         document.querySelector('p').textContent='Failed to start';\
+         if(!document.querySelector('.error')){{var e=document.createElement('p');\
+         e.className='error';e.textContent='{}';document.body.appendChild(e);}}",
+        escaped
+    ));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Show the window immediately with a loading splash.
+            let window = app.get_webview_window("main").unwrap();
+            let _ = window.eval(LOADING_HTML);
+            let _ = window.show();
+
             // Resolve the sidecar directory inside bundled resources.
             let resource_dir = app
                 .path()
@@ -75,18 +90,28 @@ pub fn run() {
 
             // Launch the Python backend from its own directory so PyInstaller
             // --onedir can find _internal/ and all shared libraries.
-            let child = Command::new(&sidecar_exe)
+            match Command::new(&sidecar_exe)
                 .current_dir(&sidecar_dir)
                 .spawn()
-                .unwrap_or_else(|e| panic!("failed to spawn backend at {:?}: {}", sidecar_exe, e));
-
-            // Store handle — Drop impl kills the process on app exit.
-            app.manage(Backend(Mutex::new(Some(child))));
-
-            // Show the window immediately with a loading splash.
-            let window = app.get_webview_window("main").unwrap();
-            let _ = window.eval(LOADING_HTML);
-            let _ = window.show();
+            {
+                Ok(child) => {
+                    app.manage(Backend(Mutex::new(Some(child))));
+                }
+                Err(e) => {
+                    let msg = format!(
+                        "Could not launch backend.\n\
+                         Path: {}\n\
+                         Exists: {}\n\
+                         Error: {}",
+                        sidecar_exe.display(),
+                        sidecar_exe.exists(),
+                        e
+                    );
+                    eprintln!("{}", msg);
+                    show_error(&window, &msg);
+                    return Ok(());
+                }
+            }
 
             // Poll for backend readiness, then navigate to the app.
             std::thread::spawn(move || {
@@ -99,11 +124,7 @@ pub fn run() {
                     }
                     std::thread::sleep(Duration::from_millis(500));
                 }
-                // 60-second timeout — show error in the window.
-                let _ = window.eval(
-                    "document.querySelector('p').textContent = \
-                     'Backend failed to start. Please restart the app.'",
-                );
+                show_error(&window, "Backend did not respond within 60 seconds.");
             });
 
             Ok(())
