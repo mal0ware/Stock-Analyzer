@@ -4,16 +4,14 @@
   <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="scikit-learn">
-  <img src="https://img.shields.io/badge/Tauri-24C8D8?style=for-the-badge&logo=tauri&logoColor=white" alt="Tauri">
-  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++">
-  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron">
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
 </p>
 
-<h1 align="center">AI Market Analyst</h1>
+<h1 align="center">Stock Analyzer</h1>
 
 <p align="center">
-  <strong>Real-time market intelligence with ML-powered trend classification, anomaly detection, and sentiment analysis.</strong>
+  <strong>Desktop stock analysis tool with real-time data, charts, and ML-powered insights.</strong>
 </p>
 
 <p align="center">
@@ -30,9 +28,9 @@
 
 | Platform | File | How to install |
 |----------|------|----------------|
-| **Windows** | `.msi` | Double-click the installer, follow the wizard |
-| **macOS** (Apple Silicon) | `.dmg` | Open the file, drag AI Market Analyst to Applications |
-| **Linux** | `.deb` or `.AppImage` | Double-click to install, or run `sudo dpkg -i *.deb` |
+| **macOS** (Apple Silicon) | `Stock.Analyzer-x.y.z-arm64.dmg` | Open, drag Stock Analyzer to Applications. First launch: right-click → Open (unsigned app). |
+| **Windows** | `Stock.Analyzer.Setup.x.y.z.exe` | Double-click the installer. On SmartScreen: "More info" → "Run anyway". |
+| **Linux** | `Stock.Analyzer-x.y.z.AppImage` | `chmod +x` the file and double-click. |
 
 No setup required. No API keys. The app opens like any other desktop application.
 
@@ -40,17 +38,20 @@ No setup required. No API keys. The app opens like any other desktop application
 
 ## What It Does
 
-AI Market Analyst is a desktop application that tracks stocks and uses machine learning to surface insights that would take a human analyst hours to compute.
+Stock Analyzer is a desktop application that tracks stocks and uses machine learning to surface insights that would take a human analyst hours to compute.
 
 | Feature | What you see |
 |---------|-------------|
 | **Market Overview** | Sector heatmap with real-time prices, top gainers and losers |
+| **Symbol Detail** | 16-stat fundamentals panel, analyst rating gauge, technical indicators, AI-generated insights, news feed |
 | **ML Trend Classification** | Each stock tagged as uptrend/downtrend/sideways with confidence % |
 | **Anomaly Detection** | Alerts when a stock's price or volume behaves unusually |
 | **Sentiment Analysis** | News headlines scored positive/negative/neutral automatically |
+| **Forecast Projections** | Dashed target/high/low lines extending from the last close price on the chart |
 | **Live Price Updates** | Prices update in real-time via WebSocket streaming |
-| **Interactive Charts** | Price and volume charts across 6 time periods |
 | **Watchlist** | Track your favorite stocks with at-a-glance ML signals |
+| **Learn** | 19-term glossary of market concepts with search and category filters |
+| **5 Color Themes** | Dark, Light, Midnight, Ocean, Terminal — persisted across launches |
 
 All data comes from Yahoo Finance — no API keys or accounts needed.
 
@@ -60,16 +61,15 @@ All data comes from Yahoo Finance — no API keys or accounts needed.
 
 ```
                     ┌─────────────────────────────────┐
-                    │        DESKTOP APP (Tauri)       │
-                    │  Native window · ~10MB installer │
+                    │       DESKTOP APP (Electron)     │
                     │  ┌───────────────────────────┐  │
-                    │  │     React Dashboard        │  │
-                    │  │  Charts · Heatmaps · Live  │  │
+                    │  │    React 19 + Tailwind v4   │  │
+                    │  │  Charts · Heatmaps · Themes │  │
                     │  └─────────────┬─────────────┘  │
                     │                │                  │
                     │  ┌─────────────▼─────────────┐  │
-                    │  │  FastAPI Backend (sidecar) │  │
-                    │  │  Starts automatically      │  │
+                    │  │  FastAPI Backend           │  │
+                    │  │  (bundled Python 3.13)     │  │
                     │  │  Rate limiting · Caching   │  │
                     │  ├─────────┬──────┬──────────┤  │
                     │  │  Data   │  ML  │ Sentiment│  │
@@ -84,65 +84,51 @@ The app runs entirely on your machine. No cloud services, no accounts, no data l
 
 ---
 
-## Tech Stack & Proficiency Demonstration
+## Tech Stack
 
 ### Python (FastAPI, scikit-learn, pandas, SQLAlchemy)
 
 The backend is a production-grade **FastAPI** service demonstrating:
 
-- **Async/concurrent architecture** — `asyncio` event loop with `ThreadPoolExecutor` for blocking I/O (yfinance), parallel data fetching across 31 tickers for the market overview endpoint
+- **Async/concurrent architecture** — `asyncio` event loop with `ThreadPoolExecutor` for blocking I/O (yfinance), parallel data fetching across sectors for the market overview endpoint
 - **ML pipeline** — Feature engineering (RSI, MACD, Bollinger Bands, volume z-scores), `HistGradientBoosting` trend classifier with rule-based fallback, `IsolationForest` anomaly detector, VADER sentiment with financial lexicon extensions
 - **ORM design** — SQLAlchemy declarative models with composite indexes, session dependency injection, SQLite/PostgreSQL swappable via single env var
-- **Security** — OWASP A01–A09 mapped: regex input validation, per-IP rate limiting with sliding window, parameterized SQL, CORS whitelist, security headers middleware
+- **Security** — Regex input validation, per-IP sliding-window rate limiting, parameterized SQL, CORS whitelist, security headers middleware
 - **Structured logging** — `structlog` with JSON/console renderers, context-aware log propagation
 
 ### TypeScript / React
 
 The frontend is a **React 19** SPA with **Vite** + **Tailwind CSS v4**:
 
-- **Component architecture** — Route-based code splitting, layout shell with search, reusable signal cards
-- **State management** — Local state with hooks (`useState`, `useEffect`, `useCallback`), `Promise.allSettled` for parallel snapshot loading
+- **Component architecture** — Route-based code splitting, layout shell with search and theme picker, reusable signal cards
+- **State management** — Local state with hooks, `Promise.allSettled` for parallel snapshot loading, `zustand` for shared watchlist state
 - **Real-time data** — Custom `useWebSocket` hook with auto-reconnect for live price updates
-- **UX patterns** — Skeleton loading screens (CSS shimmer animation), debounced search with keyboard support, responsive grid layouts
+- **Theming** — 5 palettes driven entirely by CSS custom properties + `[data-theme]` switching, no runtime theme library
+- **UX patterns** — Skeleton loading screens, debounced search with keyboard arrow-key navigation and `/` global shortcut
 - **Type safety** — Full TypeScript with strict mode, typed API client layer, interface-first design
 
-### Rust (Tauri 2)
+### Electron
 
-The desktop shell wraps the React frontend in a **native OS window** (~10MB vs Electron's ~150MB):
+The desktop shell wraps the React frontend in a native OS window and spawns the bundled Python backend as a child process:
 
-- **Sidecar pattern** — PyInstaller-bundled Python backend launched as an external process, health-checked before the window appears
-- **Cross-compilation** — GitHub Actions matrix builds for macOS (arm64), Windows (x64), Linux (x64)
-- **Security** — CSP headers, restricted IPC permissions, no console window in release builds
+- **Bundled runtime** — python-build-standalone CPython 3.13 shipped inside the app (`Contents/Resources/backend/python-env/`), no system Python dependency
+- **Single codepath** — One `main.js` handles mac, Windows, and Linux; platform-specific `afterPack` hooks handle binary permissions and environment scrubbing
+- **Health check** — App polls `/api/health` before opening the window, so users never see a blank page
+- **Clean environment** — Strips `ELECTRON_RUN_AS_NODE`, `VIRTUAL_ENV`, `CONDA_PREFIX`, etc. before spawning Python to prevent import contamination
 
-### C++ (v1 Legacy)
+### CI/CD (GitHub Actions)
 
-The original v1 backend was a **C++17 HTTP server**:
+- **Matrix builds** — Parallel native-runner builds on `macos-14` (arm64), `windows-latest`, and `ubuntu-22.04`
+- **Per-OS Python bundling** — Each runner downloads the appropriate python-build-standalone tarball and installs `api/requirements.txt` into it
+- **Automated releases** — Tag-triggered builds produce `.dmg`, `.exe`, and `.AppImage` installers uploaded directly to GitHub Releases
 
-- **Systems programming** — Socket-level HTTP server with `<thread>`, `<mutex>`, custom request router
-- **Process management** — Subprocess pool (`fork`/`execvp`) for Python analysis workers with lifecycle management
-- **Cross-compilation** — MinGW cross-compilation for Windows, with `Winsock2` abstraction layer
-- **Memory-safe caching** — TTL cache with `std::unordered_map` and mutex-guarded concurrent access
+### Docker (server deployment)
 
-### Docker
-
-Production deployment demonstrates:
+For running the backend as a hosted service rather than a desktop app:
 
 - **Multi-stage builds** — Node.js build stage (frontend), Python runtime stage (backend), no Node.js in final image
 - **Layer optimization** — Dependencies installed before source COPY for maximum cache hits
 - **Health checks** — Built-in `HEALTHCHECK` instruction, `curl`-based liveness probe
-
-### Java (v1 Legacy)
-
-The v1 interpreter module was a **Java** natural-language text generator:
-
-- **OOP design** — Strategy pattern for different analysis types, template-based sentence generation
-- **JVM interop** — Called from C++ via subprocess, JSON serialization for IPC
-
-### CI/CD (GitHub Actions)
-
-- **Matrix builds** — Parallel cross-platform desktop builds (macOS, Windows, Linux)
-- **Dependency caching** — npm, pip, Rust target caches for fast iteration
-- **Automated releases** — Tag-triggered builds produce `.exe`, `.dmg`, `.deb`, `.AppImage` installers uploaded directly to GitHub Releases
 
 ---
 
@@ -151,15 +137,24 @@ The v1 interpreter module was a **Java** natural-language text generator:
 <details>
 <summary>Development setup (click to expand)</summary>
 
-### Run locally
+### Run locally (hot reload)
 
 ```bash
 # Backend
 pip install -r api/requirements.txt
 python -m uvicorn main:app --reload --port 8080 --app-dir api
 
-# Frontend (separate terminal — hot reload)
+# Frontend (separate terminal)
 cd frontend && npm install && npm run dev
+```
+
+### Build installers locally
+
+```bash
+# macOS arm64 dmg
+bash scripts/package-macos.sh
+
+# Windows / Linux — use the GitHub Actions matrix (push a tag)
 ```
 
 ### Docker
@@ -190,7 +185,7 @@ pytest tests/ -v
 <details>
 <summary>Full endpoint reference (click to expand)</summary>
 
-### v1 Endpoints (legacy)
+### v1 Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
