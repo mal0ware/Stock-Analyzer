@@ -118,8 +118,10 @@ jobs:
             | Platform | File |
             |----------|------|
             | macOS (Apple Silicon) | `.dmg` (arm64) |
-            | macOS (Intel) | `.dmg` (x64) |
             | Windows | `.exe` (NSIS installer) |
             | Linux | `.AppImage` |
+
+            macOS note: app is unsigned — right-click the app → Open on first launch.
+            Windows note: installer is unsigned — click "More info" → "Run anyway" on SmartScreen.
           draft: false
           prerelease: false
