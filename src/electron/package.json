@@ -5,6 +5,10 @@
   "description": "Desktop stock analysis tool with real-time data, charts, and AI insights",
   "main": "main.js",
   "author": "mal0ware",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mal0ware/Stock-Analyzer.git"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
@@ -19,6 +23,7 @@
       "output": "../../dist",
       "buildResources": "build-resources"
     },
+    "publish": null,
     "asar": false,
     "files": [
       "main.js",

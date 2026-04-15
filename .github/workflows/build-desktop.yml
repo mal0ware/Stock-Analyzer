@@ -28,7 +28,7 @@ jobs:
             ext: AppImage
           - os: windows-latest
             py_arch: x86_64
-            py_platform: pc-windows-msvc-shared
+            py_platform: pc-windows-msvc
             ext: exe
 
     runs-on: ${{ matrix.os }}
