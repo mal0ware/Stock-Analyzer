@@ -7,7 +7,7 @@ import re
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./market_analyst.db")
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8089,http://localhost:5173").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:8089,http://localhost:5173").split(",")
 
 RATE_LIMIT = int(os.getenv("RATE_LIMIT", "60"))
 RATE_WINDOW = 60

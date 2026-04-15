@@ -513,4 +513,4 @@ if __name__ == "__main__":
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w")
 
-    uvicorn.run(app, host="127.0.0.1", port=8089, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=8080, log_level="warning")

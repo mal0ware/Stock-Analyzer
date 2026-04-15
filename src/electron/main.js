@@ -11,7 +11,7 @@ const fs = require('fs');
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('no-sandbox');
 
-const PORT = 8089;
+const PORT = 8080;
 const IS_WIN = process.platform === 'win32';
 const PATH_SEP = IS_WIN ? ';' : ':';
 
@@ -121,7 +121,7 @@ function startServer() {
     });
 }
 
-function waitForServer(maxAttempts = 30) {
+function waitForServer(maxAttempts = 60) {
     return new Promise((resolve, reject) => {
         let attempts = 0;
 
@@ -136,7 +136,7 @@ function waitForServer(maxAttempts = 30) {
             });
 
             req.on('error', () => retry());
-            req.setTimeout(1000, () => {
+            req.setTimeout(2000, () => {
                 req.destroy();
                 retry();
             });
@@ -146,7 +146,7 @@ function waitForServer(maxAttempts = 30) {
             if (attempts >= maxAttempts) {
                 reject(new Error('Server did not start in time'));
             } else {
-                setTimeout(check, 300);
+                setTimeout(check, 500);
             }
         }
 

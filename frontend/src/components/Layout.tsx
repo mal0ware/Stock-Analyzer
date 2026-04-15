@@ -53,8 +53,8 @@ export default function Layout() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="bg-[#0d1017]/90 backdrop-blur-md border-b border-[#1e2235] sticky top-0 z-50">
+    <div className="flex flex-col h-full">
+      <header className="bg-[#0d1017]/90 backdrop-blur-md border-b border-[#1e2235] shrink-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-6">
           <NavLink to="/" className="text-lg font-semibold text-white whitespace-nowrap tracking-tight">
             Stock Analyzer
@@ -107,11 +107,13 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+          <Outlet />
+        </div>
       </main>
 
-      <footer className="border-t border-[#1e2235] py-3 text-center text-xs text-gray-600">
+      <footer className="border-t border-[#1e2235] py-3 text-center text-xs text-gray-600 shrink-0">
         Data analysis tool — not financial advice. Past performance does not indicate future results.
       </footer>
     </div>

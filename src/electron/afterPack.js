@@ -88,7 +88,7 @@ function handleWindows(context) {
 set SCRIPT_DIR=%~dp0
 set PATH=%SCRIPT_DIR%python-env;%SCRIPT_DIR%python-env\\Scripts;%SCRIPT_DIR%jre\\bin;%PATH%
 cd /d "%SCRIPT_DIR%api"
-"%SCRIPT_DIR%python-env\\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8089 --log-level warning
+"%SCRIPT_DIR%python-env\\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8080 --log-level warning
 `;
         fs.writeFileSync(launcher, script);
         console.log('  • afterPack: wrote start-backend.bat for FastAPI fallback');
