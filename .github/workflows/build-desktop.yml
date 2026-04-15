@@ -14,12 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14        # arm64
+          - os: macos-14        # arm64 host — builds BOTH arm64 + x64 dmg
             py_arch: aarch64
-            py_platform: apple-darwin
-            ext: dmg
-          - os: macos-13        # x64
-            py_arch: x86_64
             py_platform: apple-darwin
             ext: dmg
           - os: ubuntu-22.04
