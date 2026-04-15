@@ -18,8 +18,6 @@ const PATH_SEP = IS_WIN ? ';' : ':';
 let serverProcess = null;
 let mainWindow = null;
 
-// In packaged mode, resources are in Contents/Resources/backend/.
-// In dev mode, they're in ../../build/.
 function getBackendDir() {
     if (app.isPackaged) {
         return path.join(process.resourcesPath, 'backend');
@@ -29,13 +27,19 @@ function getBackendDir() {
 
 function startServer() {
     const backendDir = getBackendDir();
-    const nativeBinary = IS_WIN ? 'stock_analyzer.exe' : 'stock_analyzer';
-    const nativePath = path.join(backendDir, nativeBinary);
-    const pyinstallerExe = IS_WIN ? 'market-analyst-api.exe' : 'market-analyst-api';
-    const pyinstallerPath = path.join(backendDir, 'market-analyst-api', pyinstallerExe);
-    const hasFastAPI = fs.existsSync(path.join(backendDir, 'api', 'main.py'));
+    const pythonExe = IS_WIN
+        ? path.join(backendDir, 'python-env', 'python.exe')
+        : path.join(backendDir, 'python-env', 'bin', 'python3');
+    const apiDir = path.join(backendDir, 'api');
 
     console.log('Backend dir:', backendDir);
+
+    if (!fs.existsSync(pythonExe) || !fs.existsSync(path.join(apiDir, 'main.py'))) {
+        console.error('Backend not found. Expected:');
+        console.error('  python:', pythonExe);
+        console.error('  api:   ', apiDir);
+        return;
+    }
 
     // Build a clean environment — remove Python/conda variables that
     // interfere with numpy imports in both bundled and system Python.
@@ -48,60 +52,23 @@ function startServer() {
         delete cleanEnv[key];
     }
 
-    // Prepend bundled runtimes to PATH (packaged mode) plus user local tools
-    const extraPaths = [];
-    if (IS_WIN) {
-        extraPaths.push(path.join(backendDir, 'python-env'));
-        extraPaths.push(path.join(backendDir, 'python-env', 'Scripts'));
-        extraPaths.push(path.join(backendDir, 'jre', 'bin'));
-    } else {
-        extraPaths.push(path.join(backendDir, 'python-env', 'bin'));
-        extraPaths.push(path.join(backendDir, 'jre', 'bin'));
-        extraPaths.push(`${process.env.HOME}/.local/jdk/bin`);
-        extraPaths.push(`${process.env.HOME}/.local/bin`);
-    }
-    cleanEnv.PATH = extraPaths.join(PATH_SEP) + PATH_SEP + (cleanEnv.PATH || '');
+    const pyBinDir = IS_WIN
+        ? [path.join(backendDir, 'python-env'), path.join(backendDir, 'python-env', 'Scripts')]
+        : [path.join(backendDir, 'python-env', 'bin')];
+    cleanEnv.PATH = pyBinDir.join(PATH_SEP) + PATH_SEP + (cleanEnv.PATH || '');
 
-    // Decide which backend to launch (in priority order)
-    if (fs.existsSync(nativePath)) {
-        // Native C++ backend
-        console.log('Starting native backend:', nativePath);
-        serverProcess = spawn(nativePath, ['--headless'], {
-            cwd: backendDir,
-            env: cleanEnv,
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-    } else if (fs.existsSync(pyinstallerPath)) {
-        // PyInstaller-bundled FastAPI backend (self-contained, no runtime deps)
-        console.log('Starting PyInstaller backend:', pyinstallerPath);
-        serverProcess = spawn(pyinstallerPath, [], {
-            cwd: path.join(backendDir, 'market-analyst-api'),
-            env: cleanEnv,
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-    } else if (hasFastAPI) {
-        // FastAPI via bundled Python (last resort)
-        console.log('Starting FastAPI backend via bundled Python');
-        const pythonExe = IS_WIN
-            ? path.join(backendDir, 'python-env', 'python.exe')
-            : path.join(backendDir, 'python-env', 'bin', 'python3');
-
-        serverProcess = spawn(pythonExe, [
-            '-m', 'uvicorn', 'main:app',
-            '--host', '127.0.0.1',
-            '--port', String(PORT),
-            '--log-level', 'warning',
-        ], {
-            cwd: path.join(backendDir, 'api'),
-            env: cleanEnv,
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-    } else {
-        console.error('No backend found in', backendDir);
-        console.error('  Checked: ', nativePath);
-        console.error('  Checked: ', pyinstallerPath);
-        return;
-    }
+    console.log('Starting FastAPI backend:', pythonExe);
+    serverProcess = spawn(pythonExe, [
+        '-m', 'uvicorn', 'main:app',
+        '--host', '127.0.0.1',
+        '--port', String(PORT),
+        '--log-level', 'warning',
+    ], {
+        cwd: apiDir,
+        env: cleanEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+    });
 
     serverProcess.stdout.on('data', (data) => {
         console.log(`[server] ${data.toString().trim()}`);
@@ -186,19 +153,14 @@ function createWindow() {
     mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
 
     mainWindow.webContents.on('did-finish-load', () => {
-        console.log('Page loaded successfully');
         mainWindow.show();
         mainWindow.focus();
     });
 
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-        console.error('Page failed to load:', errorCode, errorDescription);
-        setTimeout(() => {
-            mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
-        }, 1000);
+    mainWindow.webContents.on('did-fail-load', () => {
+        setTimeout(() => mainWindow.loadURL(`http://127.0.0.1:${PORT}`), 1000);
     });
 
-    // Open external links in default browser
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http') && !url.includes('127.0.0.1')) {
             shell.openExternal(url);
@@ -216,7 +178,6 @@ function killServer() {
     if (!serverProcess) return;
 
     if (IS_WIN) {
-        // On Windows, SIGTERM doesn't work reliably. Kill the process tree.
         try {
             execSync(`taskkill /pid ${serverProcess.pid} /T /F`, { stdio: 'ignore' });
         } catch (e) {
@@ -231,9 +192,7 @@ app.whenReady().then(async () => {
     startServer();
 
     try {
-        console.log('Waiting for backend...');
         await waitForServer();
-        console.log('Backend ready. Opening window.');
         createWindow();
     } catch (err) {
         console.error(err.message);

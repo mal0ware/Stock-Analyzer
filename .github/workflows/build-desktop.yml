@@ -3,6 +3,7 @@ name: Build Desktop Apps
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,17 +14,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            tauri_args: "--target aarch64-apple-darwin"
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            tauri_args: "--bundles deb,rpm"
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            tauri_args: ""
+          - os: macos-14        # arm64
+            py_arch: aarch64
+            py_platform: apple-darwin
+            ext: dmg
+          - os: macos-13        # x64
+            py_arch: x86_64
+            py_platform: apple-darwin
+            ext: dmg
+          - os: ubuntu-22.04
+            py_arch: x86_64
+            py_platform: unknown-linux-gnu
+            ext: AppImage
+          - os: windows-latest
+            py_arch: x86_64
+            py_platform: pc-windows-msvc-shared
+            ext: exe
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,72 +40,90 @@ jobs:
         with:
           node-version: 22
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: frontend/src-tauri
-
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
-      # Linux system deps for Tauri
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Build React frontend
+        working-directory: frontend
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          npm ci
+          npm run build
 
-      # Build React frontend first (needed by both PyInstaller sidecar and Tauri)
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      # Build Python sidecar with frontend bundled inside
-      - name: Install Python dependencies
-        run: pip install pyinstaller && pip install -r api/requirements.txt
-
-      - name: Build Python sidecar
-        run: pyinstaller market-analyst-api.spec --noconfirm
-
-      - name: Copy sidecar to Tauri resources
+      - name: Download bundled Python runtime (python-build-standalone)
         shell: bash
         run: |
-          rm -rf frontend/src-tauri/resources/sidecar
-          cp -r dist/market-analyst-api frontend/src-tauri/resources/sidecar
-          # Ensure the binary is executable (Unix)
-          if [[ "${{ matrix.platform }}" != "windows-latest" ]]; then
-            chmod +x frontend/src-tauri/resources/sidecar/market-analyst-api
-          fi
+          set -e
+          TAG="20250317"
+          VER="3.13.2"
+          ARCH="${{ matrix.py_arch }}"
+          PLAT="${{ matrix.py_platform }}"
+          URL="https://github.com/indygreg/python-build-standalone/releases/download/${TAG}/cpython-${VER}+${TAG}-${ARCH}-${PLAT}-install_only.tar.gz"
+          echo "Downloading: $URL"
+          mkdir -p src/electron/bundled
+          curl -fsSL "$URL" -o /tmp/python.tar.gz
+          tar -xzf /tmp/python.tar.gz -C src/electron/bundled
+          mv src/electron/bundled/python src/electron/bundled/python-env
 
-      # Build Tauri desktop app (.exe / .dmg / .deb / .AppImage)
-      - uses: tauri-apps/tauri-action@v0
+      - name: Install Python dependencies into bundled env (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          src/electron/bundled/python-env/bin/python3 -m pip install --upgrade pip
+          src/electron/bundled/python-env/bin/python3 -m pip install -r api/requirements.txt
+
+      - name: Install Python dependencies into bundled env (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          src/electron/bundled/python-env/python.exe -m pip install --upgrade pip
+          src/electron/bundled/python-env/python.exe -m pip install -r api/requirements.txt
+
+      - name: Install Electron dependencies
+        working-directory: src/electron
+        run: npm install
+
+      - name: Build Electron installer
+        working-directory: src/electron
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder --${{ runner.os == 'macOS' && 'mac' || runner.os == 'Windows' && 'win' || 'linux' }} --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: frontend
-          tauriScript: npx tauri
-          args: ${{ matrix.tauri_args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Stock Analyzer ${{ github.ref_name }}'
-          releaseBody: |
+          name: stock-analyzer-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/**/*.AppImage
+          name: Stock Analyzer ${{ github.ref_name }}
+          body: |
             ## Stock Analyzer ${{ github.ref_name }}
 
-            Download the installer for your platform:
-
-            | Platform | File | How to install |
-            |----------|------|----------------|
-            | **Windows** | `.msi` | Double-click, follow the wizard |
-            | **macOS** (Apple Silicon) | `.dmg` | Open, drag to Applications |
-            | **Linux** | `.deb` or `.AppImage` | Double-click or `sudo dpkg -i` |
-
-            The app runs like any desktop application — no terminal, no browser, no setup required.
-          releaseDraft: false
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` (arm64) |
+            | macOS (Intel) | `.dmg` (x64) |
+            | Windows | `.exe` (NSIS installer) |
+            | Linux | `.AppImage` |
+          draft: false
           prerelease: false

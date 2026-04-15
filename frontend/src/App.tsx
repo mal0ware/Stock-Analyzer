@@ -4,6 +4,7 @@ import Overview from './pages/Overview';
 import SymbolDetail from './pages/SymbolDetail';
 import Watchlist from './pages/Watchlist';
 import Anomalies from './pages/Anomalies';
+import Learn from './pages/Learn';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="symbol/:symbol" element={<SymbolDetail />} />
         <Route path="watchlist" element={<Watchlist />} />
         <Route path="anomalies" element={<Anomalies />} />
+        <Route path="learn" element={<Learn />} />
       </Route>
     </Routes>
   );

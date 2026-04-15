@@ -48,7 +48,7 @@ export default function Anomalies() {
             <Link
               key={`${a.symbol}-${i}`}
               to={`/symbol/${a.symbol}`}
-              className="flex items-center justify-between bg-[#131620] rounded-lg border border-orange-900/30 p-4 hover:bg-[#1a1e2e] transition-colors"
+              className="flex items-center justify-between bg-[var(--bg-card)] rounded-lg border border-orange-900/30 p-4 hover:bg-[var(--bg-card-hover)] transition-colors"
             >
               <div className="flex items-center gap-4">
                 <span className="font-semibold text-white text-lg">{a.symbol}</span>

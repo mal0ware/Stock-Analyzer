@@ -35,7 +35,7 @@ export default function Overview() {
               key={s.etf}
               className={`rounded-lg p-3 border transition-colors ${
                 s.change_pct == null
-                  ? 'border-[#1e2235] bg-[#131620]'
+                  ? 'border-[var(--border)] bg-[var(--bg-card)]'
                   : s.change_pct >= 0
                     ? 'border-emerald-900/40 bg-emerald-950/20'
                     : 'border-red-900/40 bg-red-950/20'
@@ -64,7 +64,7 @@ export default function Overview() {
               <Link
                 key={m.symbol}
                 to={`/symbol/${m.symbol}`}
-                className="flex items-center justify-between bg-[#131620] rounded-lg px-4 py-2.5 hover:bg-[#1a1e2e] transition-colors border border-transparent hover:border-[#1e2235]"
+                className="flex items-center justify-between bg-[var(--bg-card)] rounded-lg px-4 py-2.5 hover:bg-[var(--bg-card-hover)] transition-colors border border-transparent hover:border-[var(--border)]"
               >
                 <span className="font-semibold text-white text-sm">{m.symbol}</span>
                 <div className="text-right flex items-center gap-4">
@@ -85,7 +85,7 @@ export default function Overview() {
               <Link
                 key={m.symbol}
                 to={`/symbol/${m.symbol}`}
-                className="flex items-center justify-between bg-[#131620] rounded-lg px-4 py-2.5 hover:bg-[#1a1e2e] transition-colors border border-transparent hover:border-[#1e2235]"
+                className="flex items-center justify-between bg-[var(--bg-card)] rounded-lg px-4 py-2.5 hover:bg-[var(--bg-card-hover)] transition-colors border border-transparent hover:border-[var(--border)]"
               >
                 <span className="font-semibold text-white text-sm">{m.symbol}</span>
                 <div className="text-right flex items-center gap-4">

@@ -79,7 +79,7 @@ export default function Watchlist() {
           {items.map((item) => (
             <div
               key={item.symbol}
-              className="bg-[#131620] rounded-lg border border-[#1e2235] p-4 flex items-center gap-4 hover:bg-[#1a1e2e] transition-colors"
+              className="bg-[var(--bg-card)] rounded-lg border border-[var(--border)] p-4 flex items-center gap-4 hover:bg-[var(--bg-card-hover)] transition-colors"
             >
               <Link
                 to={`/symbol/${item.symbol}`}

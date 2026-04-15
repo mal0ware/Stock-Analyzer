@@ -35,6 +35,7 @@ export const interpret = (symbol: string) =>
   get<{ insights: string[] }>(`${BASE}/interpret/${symbol}`);
 export const news = (symbol: string) =>
   get<{ articles: NewsArticle[] }>(`${BASE}/news/${symbol}`);
+export const glossary = () => get<{ terms: GlossaryTerm[] }>(`${BASE}/glossary`);
 
 // v2 endpoints
 export const snapshot = (symbol: string) => get<SnapshotData>(`${V2}/symbols/${symbol}/snapshot`);
@@ -170,4 +171,12 @@ export interface NewsArticle {
   publisher: string;
   publishedAt?: string;
   thumbnail?: string;
+}
+
+export interface GlossaryTerm {
+  name: string;
+  category: string;
+  definition: string;
+  whyItMatters: string;
+  ranges: string;
 }

@@ -179,7 +179,7 @@ export default function SymbolDetail() {
         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
           inWatchlist
             ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-red-500/15 hover:text-red-400 hover:border-red-500/30'
-            : 'bg-[#131620] text-gray-300 border border-[#1e2235] hover:border-blue-500/40 hover:text-blue-400'
+            : 'bg-[var(--bg-card)] text-gray-300 border border-[var(--border)] hover:border-blue-500/40 hover:text-blue-400'
         }`}
       >
         {inWatchlist ? 'In Watchlist' : '+ Watchlist'}
@@ -187,7 +187,7 @@ export default function SymbolDetail() {
 
       {/* Company description */}
       {desc && (
-        <div className="text-sm text-gray-400 leading-relaxed border-b border-[#1e2235] pb-5">
+        <div className="text-sm text-gray-400 leading-relaxed border-b border-[var(--border)] pb-5">
           {descExpanded ? desc : shortDesc}
           {desc.length > 250 && (
             <span onClick={() => setDescExpanded(!descExpanded)} className="text-blue-400 cursor-pointer font-medium ml-1 hover:underline">
@@ -214,7 +214,7 @@ export default function SymbolDetail() {
       )}
 
       {/* Period selector */}
-      <div className="flex gap-1 bg-[#131620] rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-[var(--bg-card)] rounded-lg p-1 w-fit">
         {PERIODS.map((p) => (
           <button key={p} onClick={() => setPeriod(p)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${period === p ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -224,7 +224,7 @@ export default function SymbolDetail() {
       </div>
 
       {/* Price chart */}
-      <div className="bg-[#131620] rounded-xl p-4 border border-[#1e2235]">
+      <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-[var(--border)]">
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={chartData}>
             <defs>
@@ -237,10 +237,10 @@ export default function SymbolDetail() {
                 <stop offset="100%" stopColor="#00b464" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e2235" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="date" tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis domain={['auto', 'auto']} tick={{ fill: '#4b5068', fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
-            <Tooltip contentStyle={{ background: '#131620', border: '1px solid #1e2235', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
               labelStyle={{ color: '#8b8fa3' }} itemStyle={{ color: '#e5e7eb' }} />
             <Area type="monotone" dataKey="close" stroke="#3b82f6" fill="url(#priceGradient)" strokeWidth={2} dot={false} connectNulls={false} />
             {showForecast && <>
@@ -260,13 +260,13 @@ export default function SymbolDetail() {
       </div>
 
       {/* Volume chart */}
-      <div className="bg-[#131620] rounded-xl p-4 border border-[#1e2235]">
+      <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-[var(--border)]">
         <h3 className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Volume</h3>
         <ResponsiveContainer width="100%" height={100}>
           <BarChart data={chartData}>
             <XAxis dataKey="date" tick={false} axisLine={false} />
             <YAxis tick={{ fill: '#4b5068', fontSize: 10 }} tickLine={false} axisLine={false} width={60} />
-            <Tooltip contentStyle={{ background: '#131620', border: '1px solid #1e2235', borderRadius: '8px' }}
+            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }}
               labelStyle={{ color: '#8b8fa3' }} />
             <Bar dataKey="volume" fill="#6366f1" opacity={0.5} radius={[2, 2, 0, 0]} />
           </BarChart>
@@ -291,7 +291,7 @@ export default function SymbolDetail() {
           <SectionTitle>Analysis Insights</SectionTitle>
           <div className="space-y-2">
             {insights.map((item, i) => (
-              <div key={i} className="text-sm text-gray-400 leading-relaxed py-2.5 px-3.5 bg-[#131620] rounded-lg border-l-[3px] border-blue-500">{item}</div>
+              <div key={i} className="text-sm text-gray-400 leading-relaxed py-2.5 px-3.5 bg-[var(--bg-card)] rounded-lg border-l-[3px] border-blue-500">{item}</div>
             ))}
           </div>
         </section>
@@ -301,12 +301,12 @@ export default function SymbolDetail() {
       {articles.length > 0 && (
         <section>
           <SectionTitle>Recent News</SectionTitle>
-          <div className="divide-y divide-[#1e2235]">
+          <div className="divide-y divide-[var(--border)]">
             {articles.map((a, i) => (
               <a key={i} href={a.link} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3.5 py-3 hover:bg-[#131620] transition-colors rounded-lg px-2 -mx-2">
+                className="flex items-center gap-3.5 py-3 hover:bg-[var(--bg-card)] transition-colors rounded-lg px-2 -mx-2">
                 {a.thumbnail && /^https:\/\//.test(a.thumbnail) && (
-                  <img src={a.thumbnail} alt="" className="w-[72px] h-12 rounded object-cover bg-[#131620] flex-shrink-0" loading="lazy" />
+                  <img src={a.thumbnail} alt="" className="w-[72px] h-12 rounded object-cover bg-[var(--bg-card)] flex-shrink-0" loading="lazy" />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-gray-200 line-clamp-2">{a.title}</div>
@@ -331,7 +331,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function SignalCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
-    <div className="bg-[#131620] rounded-xl p-3.5 border border-[#1e2235]">
+    <div className="bg-[var(--bg-card)] rounded-xl p-3.5 border border-[var(--border)]">
       <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">{label}</div>
       <div className={`text-lg font-semibold mt-1 capitalize ${color}`}>{value}</div>
       <div className="text-[11px] text-gray-500 mt-0.5">{sub}</div>
@@ -433,7 +433,7 @@ function AnalystPanel({ quote: q }: { quote: api.QuoteData }) {
         </div>
       )}
       {reasons.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-[#1e2235]">
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Why analysts say {label.toLowerCase()}</div>
           {reasons.map((r, i) => (
             <div key={i} className="flex items-start gap-2 text-sm text-gray-400 leading-relaxed mb-1.5">
@@ -632,7 +632,7 @@ function AIOverview({ quote: q, analysis: a }: { quote: api.QuoteData; analysis:
   return (
     <section>
       <SectionTitle>Overview</SectionTitle>
-      <div className="bg-[#131620] border border-[#1e2235] rounded-xl p-5">
+      <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5">
         <div className="text-sm text-gray-400 leading-[1.7] space-y-3">
           {paragraphs.map((p, i) => <p key={i}>{p}</p>)}
         </div>
@@ -676,9 +676,9 @@ function KeyStats({ quote: q }: { quote: api.QuoteData }) {
   return (
     <section>
       <SectionTitle>Key Statistics</SectionTitle>
-      <div className="grid grid-cols-2 divide-y divide-[#1e2235]">
+      <div className="grid grid-cols-2 divide-y divide-[var(--border)]">
         {stats.map(([label, value], i) => (
-          <div key={label} className={`flex justify-between items-center py-2 text-sm ${i % 2 === 1 ? 'pl-5 border-l border-[#1e2235]' : 'pr-5'}`}>
+          <div key={label} className={`flex justify-between items-center py-2 text-sm ${i % 2 === 1 ? 'pl-5 border-l border-[var(--border)]' : 'pr-5'}`}>
             <span className="text-gray-400">{label}</span>
             <span className="font-semibold font-mono text-sm text-gray-200">{value}</span>
           </div>
@@ -692,7 +692,7 @@ function KeyStats({ quote: q }: { quote: api.QuoteData }) {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#131620] border border-[#1e2235] rounded-xl p-5">
+    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-5">
       <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">{title}</div>
       {children}
     </div>
@@ -710,7 +710,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 function TechRow({ label, value, signal }: { label: string; value: string; signal?: string }) {
   return (
-    <div className="flex justify-between items-center text-sm py-1.5 border-b border-[#1e2235] last:border-b-0">
+    <div className="flex justify-between items-center text-sm py-1.5 border-b border-[var(--border)] last:border-b-0">
       <span className="text-gray-400">{label}</span>
       <span className="font-semibold font-mono text-sm text-gray-200">
         {value}
