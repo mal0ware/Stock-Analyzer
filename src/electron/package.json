@@ -1,0 +1,137 @@
+{
+  "name": "stock-analyzer",
+  "version": "1.3.0",
+  "productName": "Stock Analyzer",
+  "description": "Desktop stock analysis tool with real-time data, charts, and AI insights",
+  "main": "main.js",
+  "author": "mal0ware",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mal0ware/Stock-Analyzer.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.mal0ware.stockanalyzer",
+    "productName": "Stock Analyzer",
+    "directories": {
+      "output": "../../dist",
+      "buildResources": "build-resources"
+    },
+    "publish": null,
+    "asar": false,
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../api",
+        "to": "backend/api",
+        "filter": [
+          "**/*",
+          "!__pycache__",
+          "!*.pyc",
+          "!.pytest_cache"
+        ]
+      },
+      {
+        "from": "../../ml",
+        "to": "backend/api/ml",
+        "filter": [
+          "**/*",
+          "!__pycache__",
+          "!*.pyc"
+        ]
+      },
+      {
+        "from": "../../frontend/dist",
+        "to": "backend/frontend-dist"
+      },
+      {
+        "from": "bundled/python-env",
+        "to": "backend/python-env",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "afterPack": "./afterPack.js",
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.png",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Stock Analyzer",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.png",
+      "category": "Finance"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build-resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerHeaderIcon": "build-resources/icon.ico",
+      "installerHeader": "build-resources/installerHeader.bmp",
+      "installerSidebar": "build-resources/installerSidebar.bmp",
+      "uninstallerSidebar": "build-resources/installerSidebar.bmp",
+      "include": "build-resources/installer.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Stock Analyzer",
+      "uninstallDisplayName": "Stock Analyzer",
+      "license": null
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.8.1"
+  }
+}

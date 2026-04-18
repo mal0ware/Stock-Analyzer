@@ -1,0 +1,17 @@
+dist/
+build/
+.cache/
+.git/
+node_modules/
+src/electron/node_modules/
+src/electron/bundled/
+*.dmg
+*.app
+*.AppImage
+*.exe
+.packaging-stage/
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
