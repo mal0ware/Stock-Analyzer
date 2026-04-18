@@ -88,6 +88,14 @@ jobs:
         working-directory: src/electron
         run: npm install
 
+      - name: Sync package version to tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        working-directory: src/electron
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version --no-git-tag-version --allow-same-version "$VERSION"
+
       - name: Build Electron installer
         working-directory: src/electron
         env:

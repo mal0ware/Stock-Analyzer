@@ -1,6 +1,6 @@
 {
   "name": "stock-analyzer",
-  "version": "1.3.0",
+  "version": "1.0.0",
   "productName": "Stock Analyzer",
   "description": "Desktop stock analysis tool with real-time data, charts, and AI insights",
   "main": "main.js",
