@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mal0ware/Stock-Analyzer/blob/main/SECURITY.md
+    about: Do not file security issues publicly. See SECURITY.md for the private disclosure process.
+  - name: Question or discussion
+    url: https://github.com/mal0ware/Stock-Analyzer/discussions
+    about: For general questions, use Discussions instead of Issues.

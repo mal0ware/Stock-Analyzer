@@ -1,0 +1,84 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more detail you give, the faster it gets fixed.
+
+        **Security issues**: do not file here. See [SECURITY.md](https://github.com/mal0ware/Stock-Analyzer/blob/main/SECURITY.md) for the private disclosure process.
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How are you running Stock Analyzer?
+      options:
+        - Desktop app — macOS .dmg
+        - Desktop app — Windows .exe
+        - Desktop app — Linux .AppImage
+        - Local dev (npm run dev + uvicorn)
+        - Docker / docker-compose
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: For releases, the tag from the About panel (e.g. `v1.3.0`). For dev builds, `git rev-parse --short HEAD`.
+      placeholder: "v1.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 14.4, Windows 11 23H2, Ubuntu 22.04, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect, what did you see instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list of steps that reliably triggers the bug.
+      placeholder: |
+        1. Open the app
+        2. Navigate to Simulator
+        3. Load NVDA Jan 2025
+        4. Place bracket order with SL at $X
+        5. Press Play
+        6. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Backend log location:
+        - macOS: `~/Library/Application Support/Stock Analyzer/logs/backend.log`
+        - Windows: `%APPDATA%\Stock Analyzer\logs\backend.log`
+        - Linux: `~/.config/Stock Analyzer/logs/backend.log`
+
+        Paste relevant lines (last 50 are usually enough). For frontend errors, also include the DevTools console (Cmd/Ctrl+Shift+I).
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, context, suspected cause, or workarounds you've tried.

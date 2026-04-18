@@ -1,0 +1,107 @@
+# Build output
+build/
+dist/
+cmake-build-*/
+.packaging-stage/
+.cache/
+
+# Local-only docs — internal notes never pushed to public repo
+PROJECT_DETAILS.md
+
+# AI tool artifacts — session data and local-only instruction files
+.claude/
+.claude-*
+CLAUDE.md
+.cursor/
+.aider*
+
+# Debug extractions of release artifacts
+squashfs-root/
+
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug information
+*.dwo
+
+# Java class files
+*.class
+
+# Node / Electron
+node_modules/
+src/electron/bundled/
+# src/electron/build-resources/ — tracked (contains app icons)
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# SQLite databases
+*.db
+
+# Trained ML models (binary artifacts)
+ml/models/
+
+# Benchmark results (runtime artifacts)
+benchmarks/results*.json
+
+# pytest
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# Tauri build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/
+frontend/src-tauri/gen/
+
+# PyInstaller
+build/
+
+# Internal docs (not for public repo)
+PROJECT_DETAILS.md
+
+# OS
+.DS_Store
+Thumbs.db

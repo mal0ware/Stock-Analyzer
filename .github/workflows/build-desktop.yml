@@ -1,0 +1,137 @@
+name: Build Desktop Apps
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_BUILD_STANDALONE_TAG: '20250317'
+  PYTHON_BUILD_STANDALONE_VER: '3.13.2'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14        # arm64 host — builds BOTH arm64 + x64 dmg
+            platform: macos
+            py_arch: aarch64
+            py_platform: apple-darwin
+          - os: ubuntu-22.04
+            platform: linux
+            py_arch: x86_64
+            py_platform: unknown-linux-gnu
+          - os: windows-latest
+            platform: windows
+            py_arch: x86_64
+            py_platform: pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            src/electron/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+
+      - name: Build React frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download bundled Python runtime (python-build-standalone)
+        shell: bash
+        run: |
+          set -e
+          URL="https://github.com/indygreg/python-build-standalone/releases/download/${PYTHON_BUILD_STANDALONE_TAG}/cpython-${PYTHON_BUILD_STANDALONE_VER}+${PYTHON_BUILD_STANDALONE_TAG}-${{ matrix.py_arch }}-${{ matrix.py_platform }}-install_only.tar.gz"
+          echo "Downloading: $URL"
+          mkdir -p src/electron/bundled
+          curl -fsSL "$URL" -o /tmp/python.tar.gz
+          tar -xzf /tmp/python.tar.gz -C src/electron/bundled
+          mv src/electron/bundled/python src/electron/bundled/python-env
+
+      - name: Install Python dependencies into bundled env (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          src/electron/bundled/python-env/bin/python3 -m pip install --upgrade pip
+          src/electron/bundled/python-env/bin/python3 -m pip install -r api/requirements.txt
+
+      - name: Install Python dependencies into bundled env (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          src/electron/bundled/python-env/python.exe -m pip install --upgrade pip
+          src/electron/bundled/python-env/python.exe -m pip install -r api/requirements.txt
+
+      - name: Install Electron dependencies
+        working-directory: src/electron
+        run: npm install
+
+      - name: Build Electron installer
+        working-directory: src/electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder --${{ runner.os == 'macOS' && 'mac' || runner.os == 'Windows' && 'win' || 'linux' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-analyzer-${{ matrix.platform }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/**/*.AppImage
+          name: Stock Analyzer ${{ github.ref_name }}
+          body: |
+            ## Stock Analyzer ${{ github.ref_name }}
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` (arm64) |
+            | Windows | `.exe` (NSIS installer) |
+            | Linux | `.AppImage` |
+
+            macOS note: app is unsigned — right-click the app → Open on first launch.
+            Windows note: installer is unsigned — click "More info" → "Run anyway" on SmartScreen.
+          draft: false
+          prerelease: false
