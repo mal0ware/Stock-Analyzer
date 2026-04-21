@@ -63,6 +63,7 @@
       }
     ],
     "afterPack": "./afterPack.js",
+    "afterSign": "./afterSign.js",
     "mac": {
       "category": "public.app-category.finance",
       "target": [
