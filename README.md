@@ -43,7 +43,7 @@ Stock Analyzer is a desktop application that tracks stocks and uses machine lear
 | Feature | What you see |
 |---------|-------------|
 | **Market Overview** | Sector heatmap with real-time prices, top gainers and losers |
-| **Symbol Detail** | 16-stat fundamentals panel, analyst rating gauge, technical indicators, AI-generated insights, news feed |
+| **Symbol Detail** | 16-stat fundamentals panel, analyst rating gauge, technical indicators, ML-generated insights, news feed |
 | **TradingView Charts** | Candlesticks + volume histogram, draggable price lines, right-click context menu, focus mode |
 | **Order Book (Level 2)** | Real top-of-book NBBO from Yahoo, deeper levels synthesized with imbalance gauge |
 | **Trading Simulator** | Backtest strategies with market/limit/bracket/options orders, time playback (1x–10x), live P&L, win rate, profit factor |

@@ -2,7 +2,7 @@
   "name": "stock-analyzer",
   "version": "1.0.0",
   "productName": "Stock Analyzer",
-  "description": "Desktop stock analysis tool with real-time data, charts, and AI insights",
+  "description": "Desktop stock analysis tool with real-time data, charts, and ML insights",
   "main": "main.js",
   "author": "mal0ware",
   "repository": {
@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.mal0ware.stockanalyzer",
     "productName": "Stock Analyzer",
+    "copyright": "Copyright © 2026 mal0ware",
     "directories": {
       "output": "../../dist",
       "buildResources": "build-resources"
@@ -113,10 +114,12 @@
           ]
         }
       ],
-      "icon": "build-resources/icon.ico"
+      "icon": "build-resources/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "installerHeaderIcon": "build-resources/icon.ico",
       "installerHeader": "build-resources/installerHeader.bmp",

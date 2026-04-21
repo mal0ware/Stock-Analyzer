@@ -5,8 +5,6 @@ cmake-build-*/
 .packaging-stage/
 .cache/
 
-
-
 # Debug extractions of release artifacts
 squashfs-root/
 
@@ -89,7 +87,6 @@ frontend/src-tauri/gen/
 
 # PyInstaller
 build/
-
 
 # OS
 .DS_Store
