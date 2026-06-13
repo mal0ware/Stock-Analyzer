@@ -18,8 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from db.session import get_db
 from db.models import Watchlist
+from db.session import get_db
 from validation import validate_symbol
 
 router = APIRouter(prefix="/api/v1", tags=["v2-watchlist"])

@@ -2,8 +2,8 @@
 Tests for the ML pipeline — features, trend classifier, anomaly detector, sentiment scorer.
 """
 
-import sys
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -11,12 +11,11 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ml.features import compute_features, rsi, macd, bollinger_width, volume_zscore
-from ml.trend import TrendClassifier
 from ml.anomaly import AnomalyDetector
-from ml.sentiment import SentimentScorer, SentimentResult
-from ml.gradient_boosting import GradientBoostingClassifier, DecisionTree
-
+from ml.features import bollinger_width, compute_features, macd, rsi, volume_zscore
+from ml.gradient_boosting import DecisionTree, GradientBoostingClassifier
+from ml.sentiment import SentimentResult, SentimentScorer
+from ml.trend import TrendClassifier
 
 # ---------------------------------------------------------------------------
 # Feature engineering tests

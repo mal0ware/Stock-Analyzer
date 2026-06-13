@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Iterable
+from collections.abc import Iterable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 

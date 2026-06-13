@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 
 import aiohttp
 
-
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
 BASE_URL = "https://finnhub.io/api/v1"
 

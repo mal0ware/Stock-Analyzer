@@ -58,7 +58,6 @@ References
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -77,8 +76,8 @@ class DecisionNode:
 
     feature_idx: int | None = None
     threshold: float | None = None
-    left: "DecisionNode | None" = None
-    right: "DecisionNode | None" = None
+    left: DecisionNode | None = None
+    right: DecisionNode | None = None
     value: float = 0.0
     gain: float = 0.0
     n_samples: int = 0
@@ -141,7 +140,7 @@ class DecisionTree:
         self.root: DecisionNode | None = None
         self._feature_importances: np.ndarray | None = None
         self._n_features: int = 0
-        self._flat: Optional[_FlatTree] = None
+        self._flat: _FlatTree | None = None
 
     # --------------------------------------------------------------- fit API
 
@@ -150,7 +149,7 @@ class DecisionTree:
         X: np.ndarray,
         gradients: np.ndarray,
         hessians: np.ndarray,
-    ) -> "DecisionTree":
+    ) -> DecisionTree:
         """Build the tree greedily."""
         self._n_features = X.shape[1]
         self._feature_importances = np.zeros(self._n_features, dtype=np.float64)
@@ -440,7 +439,7 @@ class GradientBoostingClassifier:
         X: np.ndarray,
         y: np.ndarray,
         sample_weight: np.ndarray | None = None,
-    ) -> "GradientBoostingClassifier":
+    ) -> GradientBoostingClassifier:
         """Train the ensemble.
 
         At each round:

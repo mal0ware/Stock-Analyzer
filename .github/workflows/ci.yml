@@ -33,8 +33,10 @@ jobs:
         run: pip install -r api/requirements.txt
 
       - name: Lint Python (ruff)
-        run: pip install ruff && ruff check api/ ml/ tests/
-        continue-on-error: true
+        run: pip install ruff==0.15.17 && ruff check api/ ml/ tests/ benchmarks/
+
+      - name: Type check Python (mypy)
+        run: pip install mypy==2.1.0 && mypy
 
       - name: Run pytest
         run: pytest tests/ -v

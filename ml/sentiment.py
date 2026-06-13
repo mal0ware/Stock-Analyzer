@@ -108,7 +108,7 @@ class SentimentScorer:
 
         scores = [r.score for r in results]
         confidences = [r.confidence for r in results]
-        avg_score = sum(s * c for s, c in zip(scores, confidences)) / max(sum(confidences), 1e-6)
+        avg_score = sum(s * c for s, c in zip(scores, confidences, strict=True)) / max(sum(confidences), 1e-6)
         avg_confidence = sum(confidences) / len(confidences)
 
         labels = [r.label for r in results]

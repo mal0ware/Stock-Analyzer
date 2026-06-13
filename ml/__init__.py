@@ -14,8 +14,8 @@ All three are cheap to instantiate once; keeping a module-level singleton
 avoids repeatedly rebuilding the models for every request.
 """
 
-from .trend import classifier as trend_classifier
 from .anomaly import detector as anomaly_detector
 from .sentiment import scorer as sentiment_scorer
+from .trend import classifier as trend_classifier
 
 __all__ = ["trend_classifier", "anomaly_detector", "sentiment_scorer"]

@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from cache import cache
 from config import CACHE_TTLS
-from validation import validate_symbol, validate_period
+from validation import validate_period, validate_symbol
 
 VALID_INTERVALS = {"1m", "5m", "15m", "1h", "1d", "1wk"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -72,7 +72,7 @@ async def symbol_history(symbol: str, period: str = "1mo"):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(502, f"Failed to fetch history: {e}")
+        raise HTTPException(502, f"Failed to fetch history: {e}") from e
 
 
 @router.get("/{symbol}/history-range")
@@ -87,7 +87,7 @@ async def symbol_history_range(symbol: str, start: str, end: str, interval: str 
         start_dt = datetime.strptime(start, "%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
     except ValueError:
-        raise HTTPException(400, "Invalid date format")
+        raise HTTPException(400, "Invalid date format") from None
 
     if start_dt >= end_dt:
         raise HTTPException(400, "start must be before end")
@@ -132,4 +132,4 @@ async def symbol_history_range(symbol: str, start: str, end: str, interval: str 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(502, f"Failed to fetch history range: {e}")
+        raise HTTPException(502, f"Failed to fetch history range: {e}") from e

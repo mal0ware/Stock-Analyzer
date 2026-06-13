@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session
 
 from cache import cache
 from config import CACHE_TTLS
-from db.session import get_db
 from db.models import SentimentRecord
+from db.session import get_db
+from ingestion import news as news_source
+from ingestion import reddit as reddit_source
 from validation import validate_symbol
-from ingestion import news as news_source, reddit as reddit_source
 
 # Add ml/ to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

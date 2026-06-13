@@ -71,6 +71,7 @@ def _percentiles(latencies: list[float]) -> dict:
 
 def main():
     from fastapi.testclient import TestClient
+
     from main import app
 
     client = TestClient(app)

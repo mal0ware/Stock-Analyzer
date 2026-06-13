@@ -129,7 +129,7 @@ def main():
         print(f"  Accuracy:    {sklearn['accuracy']:.1%}")
         print(f"  Predict:     {sklearn['predict_ms_per_sample']:.4f} ms/sample")
 
-        print(f"\nComparison:")
+        print("\nComparison:")
         acc_diff = custom["accuracy"] - sklearn["accuracy"]
         speed_ratio = custom["train_seconds"] / sklearn["train_seconds"] if sklearn["train_seconds"] > 0 else float("inf")
         print(f"  Accuracy diff:      {acc_diff:+.1%} (custom - sklearn)")

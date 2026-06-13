@@ -234,7 +234,7 @@ class EventBus:
             return None
 
     @staticmethod
-    def _fetch_ohlcv_window(symbol: str, period: str = "3mo") -> "pd.DataFrame | None":
+    def _fetch_ohlcv_window(symbol: str, period: str = "3mo") -> pd.DataFrame | None:
         """Fetch OHLCV history for ML feature computation (blocking call)."""
 
         try:
