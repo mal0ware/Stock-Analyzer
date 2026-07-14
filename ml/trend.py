@@ -7,7 +7,7 @@ pipeline includes stratified K-fold cross-validation, hyperparameter grid
 search, class-weight balancing, and feature importance analysis.
 
 Input: Rolling window of OHLCV features
-Output: strong_uptrend | uptrend | sideways | downtrend | strong_uptrend
+Output: strong_uptrend | uptrend | sideways | downtrend | strong_downtrend
 """
 
 import itertools
