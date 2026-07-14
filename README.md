@@ -20,6 +20,8 @@
   <img src="https://img.shields.io/badge/API%20Key-Not%20Required-brightgreen?style=flat-square" alt="No API Key">
 </p>
 
+> **Maintenance status:** v1.0.0 shipped 2026-04-21. The project is maintained on-demand, not actively developed. Last verified 2026-07-14: full test suite passing (45 passed, 1 skipped) and the live Yahoo Finance data path (quote, history, search, ML snapshot) working with `yfinance` 1.4.1.
+
 ---
 
 ## Download
@@ -113,7 +115,7 @@ The classifier uses second-order (Newton) optimization with softmax cross-entrop
 
 ### Training Results
 
-Trained on 11,050 samples from 25 large-cap stocks (2-year daily data):
+Trained on 11,050 samples from 25 large-cap stocks (2-year daily data). Note: the accuracy below is **in-sample training accuracy** (the model is scored on the data it was fit on), not an out-of-sample estimate of predictive power — see `docs/REVAMP_PLAN.md` for the planned walk-forward evaluation that would replace it.
 
 | Metric | Score |
 |--------|-------|
@@ -131,6 +133,18 @@ Trained on 11,050 samples from 25 large-cap stocks (2-year daily data):
 | **Sentiment Scorer** | VADER + financial lexicon | Scores news headlines as positive/negative/neutral |
 
 All models run locally on your machine.
+
+### Where the Trained Model Lives (and What Ships)
+
+The trained artifact `ml/models/trend_classifier.pkl` (plus `metrics.json`) is written by `python -m ml.train_cli` and is **gitignored — it is not committed to this repository**, and no step downloads or trains it during a build.
+
+Consequences, honestly stated:
+
+- **Release installers do not contain the trained model.** The `Build Desktop Apps` workflow (`.github/workflows/build-desktop.yml`) packages a clean checkout, so `ml/models/` does not exist at build time. In the shipped v1.0.0 app the trend signal comes from the rule-based heuristic (`TrendClassifier._rule_based_fallback`); snapshot responses report `"method": "rule_based"` instead of `"method": "ml_model"`.
+- **A locally built installer *can* include it.** electron-builder copies the whole `ml/` tree into the app bundle (`extraResources` → `backend/api/ml` in `src/electron/package.json`), so if you run `python -m ml.train_cli` before `npm run dist`, the `.pkl` and `metrics.json` ship inside your build and the classifier loads them at startup.
+- The same applies to a dev checkout and the Docker image: train first (see `ml/TRAINING.md`), or you get the rule-based fallback.
+
+The app degrades gracefully either way — the fallback is deliberate — but "from-scratch gradient-boosted model" applies to shipped binaries only if you train before packaging.
 
 ---
 
