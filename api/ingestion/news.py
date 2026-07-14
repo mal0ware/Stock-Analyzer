@@ -19,7 +19,7 @@ async def fetch_news_headlines(symbol: str, limit: int = 10) -> list[dict]:
     if not NEWSAPI_KEY:
         return []
 
-    params = {
+    params: dict[str, str | int] = {
         "q": symbol,
         "sortBy": "publishedAt",
         "pageSize": limit,
