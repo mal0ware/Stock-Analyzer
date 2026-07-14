@@ -7,7 +7,6 @@ import os
 
 import aiohttp
 
-
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 

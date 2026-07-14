@@ -181,7 +181,7 @@ def _compute_f1_per_class(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int
 def _confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> list[list[int]]:
     """Compute a confusion matrix as a nested list."""
     cm = np.zeros((n_classes, n_classes), dtype=int)
-    for t, p in zip(y_true, y_pred):
+    for t, p in zip(y_true, y_pred, strict=True):
         cm[t, p] += 1
     return cm.tolist()
 

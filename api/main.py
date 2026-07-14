@@ -40,15 +40,15 @@ os.environ["PYTHONWARNINGS"] = "ignore"
 import yfinance as yf
 
 from analysis import compute_all
-from interpreter import generate_insights
-from glossary import get_all_terms
-from config import CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW, CACHE_TTLS
 from cache import cache, cached
-from middleware import SecurityHeadersMiddleware, RequestContextMiddleware
-from logging_config import setup_logging, get_logger
+from config import CACHE_TTLS, CORS_ORIGINS, RATE_LIMIT, RATE_WINDOW
 from db.session import init_db
 from event_bus import bus
-from validation import validate_symbol, validate_period
+from glossary import get_all_terms
+from interpreter import generate_insights
+from logging_config import get_logger, setup_logging
+from middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from validation import validate_period, validate_symbol
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -222,9 +222,9 @@ def _fetch_news_sync(sym: str) -> dict:
 
 
 def _search_sync(q: str) -> dict:
-    import urllib.request
-    import urllib.parse
     import json
+    import urllib.parse
+    import urllib.request
 
     url = (
         f"https://query2.finance.yahoo.com/v1/finance/search"
@@ -279,7 +279,7 @@ async def _quote_impl(sym: str) -> dict:
     try:
         out = await run_in_thread(_fetch_quote_sync, sym)
     except Exception as e:
-        raise HTTPException(502, f"Failed to fetch quote: {e}")
+        raise HTTPException(502, f"Failed to fetch quote: {e}") from e
     if out is None:
         raise HTTPException(404, f"No data found for ticker '{sym}'")
     return out
@@ -376,7 +376,7 @@ async def _history_impl(sym: str, period: str) -> dict:
     try:
         out = await run_in_thread(_fetch_history_sync, sym, period)
     except Exception as e:
-        raise HTTPException(502, f"Failed to fetch history: {e}")
+        raise HTTPException(502, f"Failed to fetch history: {e}") from e
     if out is None:
         raise HTTPException(404, f"No history data for '{sym}' (period={period})")
     cache.set(key, out, _history_ttl(period))
@@ -424,14 +424,14 @@ async def glossary():
 # v2 Endpoints (ML intelligence layer) — route modules
 # ---------------------------------------------------------------------------
 
-from routes.snapshot import router as snapshot_router
-from routes.history import router as history_router
-from routes.sentiment import router as sentiment_router
 from routes.anomalies import router as anomalies_router
+from routes.history import router as history_router
 from routes.market import router as market_router
+from routes.orderbook import router as orderbook_router
+from routes.sentiment import router as sentiment_router
+from routes.snapshot import router as snapshot_router
 from routes.watchlist import router as watchlist_router
 from routes.websocket import router as websocket_router
-from routes.orderbook import router as orderbook_router
 
 app.include_router(snapshot_router)
 app.include_router(history_router)
@@ -500,8 +500,9 @@ else:
 
 
 if __name__ == "__main__":
-    import sys
     import os
+    import sys
+
     import uvicorn
 
     # When running as a PyInstaller --noconsole exe, sys.stdout/stderr are None

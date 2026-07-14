@@ -39,7 +39,6 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -145,7 +144,7 @@ class AnomalyDetector:
 
         per_bar: list[dict] = []
         events: list[dict] = []
-        for i, (idx, score) in enumerate(zip(features_df.index, scores)):
+        for i, (idx, score) in enumerate(zip(features_df.index, scores, strict=True)):
             row_features = {c: round(float(features_df[c].iloc[i]), 4) for c in FEATURE_COLS}
             row_z = {c: round(float(z[c].iloc[i]), 3) for c in FEATURE_COLS}
             flag = bool(score > 0.7)
@@ -207,7 +206,7 @@ class AnomalyDetector:
 
     def _get_or_fit(
         self,
-        symbol: Optional[str],
+        symbol: str | None,
         features_df: pd.DataFrame,
         X: np.ndarray,
     ) -> IsolationForest:

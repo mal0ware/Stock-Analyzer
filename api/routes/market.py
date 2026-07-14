@@ -76,7 +76,7 @@ async def market_overview():
 
     # Build sector data
     sectors = []
-    for (name, etf), data in zip(SECTOR_ETFS.items(), sector_results):
+    for (name, etf), data in zip(SECTOR_ETFS.items(), sector_results, strict=True):
         if data:
             sectors.append({"sector": name, "etf": etf, "price": data["price"], "change_pct": data["change_pct"]})
         else:

@@ -1,3 +1,32 @@
+[tool.ruff]
+target-version = "py310"
+# ``api/`` modules import each other flat (``from cache import cache``), so the
+# directory must be on the source path for import-order classification to see
+# them as first-party. The repo root covers ``ml``, ``tests``, ``benchmarks``.
+src = [".", "api"]
+
+[tool.ruff.lint]
+select = [
+    "E4",  # import placement
+    "E7",  # statement formatting
+    "E9",  # syntax / io errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade (modern syntax for the 3.10+ floor)
+    "B",   # bugbear (likely-bug patterns)
+]
+ignore = [
+    # FastAPI's dependency-injection idiom is a function call in a default
+    # argument (``Query(...)``, ``Depends(...)``) — B008 flags every endpoint.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Two deliberate late-import blocks: the warnings filter must run before
+# yfinance is imported (it emits on import), and route modules are imported
+# after the v1 endpoints so the registration order is explicit.
+"api/main.py" = ["E402"]
+
 [tool.mypy]
 # Target the active runtime. python-build-standalone ships 3.13 but the
 # project supports 3.10+ for dev installs.

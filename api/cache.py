@@ -29,10 +29,11 @@ wall-clock jumps (NTP sync, DST).
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Awaitable, Callable
 from functools import wraps
 from threading import RLock
 from time import monotonic
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 

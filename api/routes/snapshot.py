@@ -13,14 +13,14 @@ from fastapi import APIRouter, HTTPException
 
 from cache import cache
 from config import CACHE_TTLS
-from validation import validate_symbol
 from ingestion import news as news_source
+from validation import validate_symbol
 
 # Add ml/ to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from ml.trend import classifier as trend_classifier
 from ml.anomaly import detector as anomaly_detector
 from ml.sentiment import scorer as sentiment_scorer
+from ml.trend import classifier as trend_classifier
 
 router = APIRouter(prefix="/api/v1/symbols", tags=["v2-intelligence"])
 

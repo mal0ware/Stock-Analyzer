@@ -7,8 +7,8 @@ Verifies that:
 """
 
 import json
-import sys
 import os
+import sys
 import time
 
 import numpy as np

@@ -5,8 +5,8 @@ Verifies that ML signals are present and valid in the API response,
 and that graceful degradation works when no trained model exists.
 """
 
-import sys
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -53,6 +53,7 @@ def mock_ticker():
 def api_client():
     """Create a FastAPI test client."""
     from fastapi.testclient import TestClient
+
     from main import app
     return TestClient(app)
 

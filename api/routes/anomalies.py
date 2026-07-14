@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 
 from cache import cache
 from config import CACHE_TTLS
-from db.session import get_db
 from db.models import AnomalyRecord
+from db.session import get_db
 from validation import validate_symbol
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -126,7 +126,7 @@ async def anomaly_scan(symbol: str, period: str = "6mo"):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(502, f"Anomaly scan failed: {e}")
+        raise HTTPException(502, f"Anomaly scan failed: {e}") from e
 
     # Cache for the same TTL as a long-history fetch
     cache.set(key, result, CACHE_TTLS.get("history_long", 600))

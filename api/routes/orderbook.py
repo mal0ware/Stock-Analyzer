@@ -128,7 +128,7 @@ async def orderbook(symbol: str, levels: int = DEFAULT_LEVELS):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(502, f"Order book unavailable: {e}")
+        raise HTTPException(502, f"Order book unavailable: {e}") from e
 
     # Short TTL — the inside changes constantly during market hours
     cache.set(key, result, CACHE_TTLS.get("quote", 30))

@@ -47,7 +47,7 @@ __all__ = [
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _as_float_array(prices: "list[float] | np.ndarray") -> np.ndarray:
+def _as_float_array(prices: list[float] | np.ndarray) -> np.ndarray:
     """Coerce a price series to a contiguous float64 ndarray.
 
     None/NaN values are replaced with the previous finite value (forward
@@ -77,7 +77,7 @@ def _round_list(arr: np.ndarray, decimals: int = 2) -> list[float]:
 # Moving averages
 # ---------------------------------------------------------------------------
 
-def sma(prices: "list[float] | np.ndarray", period: int) -> list[float]:
+def sma(prices: list[float] | np.ndarray, period: int) -> list[float]:
     """Simple moving average with period ``period``.
 
     Uses a cumulative-sum trick to compute every window in ``O(N)`` total:
@@ -91,7 +91,7 @@ def sma(prices: "list[float] | np.ndarray", period: int) -> list[float]:
     return _round_list(out)
 
 
-def ema(prices: "list[float] | np.ndarray", period: int) -> list[float]:
+def ema(prices: list[float] | np.ndarray, period: int) -> list[float]:
     """Exponential moving average seeded with the SMA of the first window.
 
     Formula: ``EMA_t = alpha * P_t + (1 - alpha) * EMA_{t-1}`` with
@@ -126,7 +126,7 @@ def _ema_array(arr: np.ndarray, period: int) -> np.ndarray:
 # Momentum indicators
 # ---------------------------------------------------------------------------
 
-def rsi(prices: "list[float] | np.ndarray", period: int = 14) -> list[float]:
+def rsi(prices: list[float] | np.ndarray, period: int = 14) -> list[float]:
     """Wilder's Relative Strength Index.
 
     Vectorised: gains/losses are derived from a single ``np.diff`` call,
@@ -159,7 +159,7 @@ def rsi(prices: "list[float] | np.ndarray", period: int = 14) -> list[float]:
 
 
 def macd(
-    prices: "list[float] | np.ndarray",
+    prices: list[float] | np.ndarray,
     fast: int = 12,
     slow: int = 26,
     signal_period: int = 9,
@@ -197,7 +197,7 @@ def macd(
 # Risk / trend indicators
 # ---------------------------------------------------------------------------
 
-def volatility(prices: "list[float] | np.ndarray", period: int = 0) -> float:
+def volatility(prices: list[float] | np.ndarray, period: int = 0) -> float:
     """Population standard deviation of simple returns, as a percentage.
 
     When ``period`` is zero (the default) the entire series is used,
@@ -217,7 +217,7 @@ def volatility(prices: "list[float] | np.ndarray", period: int = 0) -> float:
     return float(returns.std() * 100.0)
 
 
-def detect_trend(prices: "list[float] | np.ndarray") -> str:
+def detect_trend(prices: list[float] | np.ndarray) -> str:
     """Classify trend from the slope of a least-squares fit.
 
     We normalise the slope by the mean price and by the series length so
@@ -242,8 +242,8 @@ def detect_trend(prices: "list[float] | np.ndarray") -> str:
 
 
 def support_resistance(
-    highs: "list[float] | np.ndarray",
-    lows: "list[float] | np.ndarray",
+    highs: list[float] | np.ndarray,
+    lows: list[float] | np.ndarray,
 ) -> dict:
     """Minimum low / maximum high over the last ``lookback`` bars (≤20)."""
     hi = _as_float_array(highs)

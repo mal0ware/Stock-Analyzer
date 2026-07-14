@@ -4,9 +4,9 @@ Integration tests for the full ML pipeline.
 All tests use synthetic data — no yfinance calls, no network.
 """
 
+import os
 import pickle
 import sys
-import os
 
 import numpy as np
 import pandas as pd
@@ -14,16 +14,15 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ml.gradient_boosting import GradientBoostingClassifier
-from ml.features import compute_features
-from ml.trend import (
-    _label_trend,
-    _compute_class_weights,
-    _stratified_k_fold,
-    FEATURE_COLS,
-)
 from ml.anomaly import AnomalyDetector
-
+from ml.features import compute_features
+from ml.gradient_boosting import GradientBoostingClassifier
+from ml.trend import (
+    FEATURE_COLS,
+    _compute_class_weights,
+    _label_trend,
+    _stratified_k_fold,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -126,6 +125,82 @@ def test_model_persistence_roundtrip(synthetic_classification_data):
     preds_after = model2.predict(X)
 
     assert np.array_equal(preds_before, preds_after)
+
+
+def test_trend_classifier_disk_roundtrip(synthetic_ohlcv, tmp_path, monkeypatch):
+    """Full save->load round-trip through the production TrendClassifier.
+
+    Exercises the real artifact path: fit a GradientBoostingClassifier, pickle
+    it to ``MODEL_PATH`` and dump ``metrics.json`` exactly as ``ml.trend.train``
+    does, then load it back through a *fresh* ``TrendClassifier`` instance (the
+    same code path the API uses) and confirm ``predict`` returns the documented
+    contract and is byte-stable across the reload. No network, deterministic.
+    """
+    import json
+    import pickle
+
+    import ml.trend as trend_mod
+
+    # Redirect the module-level artifact paths at runtime so the test writes
+    # into pytest's tmp_path instead of the repo's ml/models/ directory.
+    model_path = tmp_path / "trend_classifier.pkl"
+    metrics_path = tmp_path / "metrics.json"
+    monkeypatch.setattr(trend_mod, "MODEL_PATH", model_path)
+    monkeypatch.setattr(trend_mod, "METRICS_PATH", metrics_path)
+
+    # ---- fit: build a labelled dataset from synthetic OHLCV and train -------
+    features = compute_features(synthetic_ohlcv).copy()
+    features["future_return"] = features["close"].shift(-10) / features["close"] * 100 - 100
+    features = features.dropna()
+    X = features[FEATURE_COLS].values
+    y = features["future_return"].apply(_label_trend).values
+
+    model = GradientBoostingClassifier(n_estimators=25, max_depth=3, learning_rate=0.1)
+    model.fit(X, y)
+
+    # ---- save: pickle the model + write metrics.json (mirrors train()) ------
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
+    metrics_path.write_text(json.dumps({
+        "accuracy": round(float((model.predict(X) == y).mean()), 4),
+        "feature_importances_gain": {
+            FEATURE_COLS[i]: round(float(v), 4)
+            for i, v in enumerate(model.feature_importances_)
+        },
+        "feature_importances_permutation": {c: 0.0 for c in FEATURE_COLS},
+    }))
+    assert model_path.exists()
+    assert metrics_path.exists()
+
+    # ---- load: a fresh classifier must lazily load the pickle from disk -----
+    clf = trend_mod.TrendClassifier()
+    assert clf._model is None  # nothing loaded yet
+    result = clf.predict(synthetic_ohlcv)
+
+    # Contract check: trained model path (not the rule-based fallback).
+    # The estimator only emits probabilities for classes seen during fit, so
+    # the keys are a subset of LABELS — not necessarily all five.
+    n_classes_trained = len(np.unique(y))
+    assert result["method"] == "ml_model"
+    assert result["trend"] in trend_mod.LABELS
+    assert 0.0 <= result["trend_confidence"] <= 1.0
+    assert set(result["probabilities"]).issubset(set(trend_mod.LABELS))
+    assert len(result["probabilities"]) == n_classes_trained
+    # Probabilities are rounded to 3 decimals by the classifier, so allow a
+    # tolerance proportional to that rounding rather than exact summation.
+    assert abs(sum(result["probabilities"].values()) - 1.0) < 0.005
+
+    # Reload through a second instance: predictions must be identical, proving
+    # the on-disk artifact fully reconstructs the estimator.
+    clf2 = trend_mod.TrendClassifier()
+    result2 = clf2.predict(synthetic_ohlcv)
+    assert result2["trend"] == result["trend"]
+    assert result2["probabilities"] == result["probabilities"]
+
+    # Feature importances should be readable straight from the metrics file.
+    importances = clf.get_feature_importances()
+    assert importances is not None
+    assert set(importances["gain"]) == set(FEATURE_COLS)
 
 
 def test_cross_validation_runs(synthetic_classification_data):

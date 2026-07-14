@@ -3,8 +3,9 @@ Structured logging via structlog — JSON-formatted logs for production,
 human-readable for development.
 """
 
-import os
 import logging
+import os
+
 import structlog
 
 
@@ -37,5 +38,5 @@ def setup_logging():
 
 
 def get_logger(name: str = __name__) -> "structlog.BoundLogger":
-    logger: "structlog.BoundLogger" = structlog.get_logger(name)
+    logger: structlog.BoundLogger = structlog.get_logger(name)
     return logger
