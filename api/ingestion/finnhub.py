@@ -9,8 +9,12 @@ from datetime import datetime, timezone
 
 import aiohttp
 
+from logging_config import get_logger
+
 FINNHUB_KEY = os.getenv("FINNHUB_KEY")
 BASE_URL = "https://finnhub.io/api/v1"
+
+log = get_logger(__name__)
 
 
 async def fetch_company_news(symbol: str, days_back: int = 7) -> list[dict]:
@@ -37,6 +41,12 @@ async def fetch_company_news(symbol: str, days_back: int = 7) -> list[dict]:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{BASE_URL}/company-news", params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 if resp.status != 200:
+                    log.warning(
+                        "finnhub.company_news_http_error",
+                        symbol=symbol.upper(),
+                        source="finnhub",
+                        status=resp.status,
+                    )
                     return []
                 articles = await resp.json()
                 if not isinstance(articles, list):
@@ -54,7 +64,14 @@ async def fetch_company_news(symbol: str, days_back: int = 7) -> list[dict]:
                     for a in articles[:20]
                     if a.get("headline")
                 ]
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "finnhub.company_news_failed",
+            symbol=symbol.upper(),
+            source="finnhub",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return []
 
 
@@ -72,6 +89,12 @@ async def fetch_quote(symbol: str) -> dict | None:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{BASE_URL}/quote", params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 if resp.status != 200:
+                    log.warning(
+                        "finnhub.quote_http_error",
+                        symbol=symbol.upper(),
+                        source="finnhub",
+                        status=resp.status,
+                    )
                     return None
                 data = await resp.json()
                 if not data or data.get("c", 0) == 0:
@@ -86,7 +109,14 @@ async def fetch_quote(symbol: str) -> dict | None:
                     "change_pct": data.get("dp"),
                     "timestamp": datetime.fromtimestamp(data.get("t", 0), tz=timezone.utc).isoformat(),
                 }
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "finnhub.quote_failed",
+            symbol=symbol.upper(),
+            source="finnhub",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return None
 
 

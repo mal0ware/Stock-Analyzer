@@ -6,11 +6,15 @@ Graceful fallback: returns empty list when credentials are missing.
 import os
 from datetime import datetime, timezone
 
+from logging_config import get_logger
+
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "StockAnalyzer/2.0")
 
 SUBREDDITS = ["wallstreetbets", "stocks", "investing"]
+
+log = get_logger(__name__)
 
 
 async def fetch_reddit_posts(symbol: str, limit: int = 25) -> list[dict]:
@@ -43,9 +47,24 @@ async def fetch_reddit_posts(symbol: str, limit: int = 25) -> list[dict]:
                     "url": f"https://reddit.com{post.permalink}",
                 })
         return posts
-    except ImportError:
+    except ImportError as exc:
+        # praw is an optional dependency; its absence means the source is
+        # simply unavailable, not that a fetch went wrong.
+        log.info(
+            "reddit.praw_unavailable",
+            symbol=symbol,
+            source="reddit",
+            error=str(exc),
+        )
         return []
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "reddit.fetch_failed",
+            symbol=symbol,
+            source="reddit",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return []
 
 

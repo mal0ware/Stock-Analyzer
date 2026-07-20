@@ -7,8 +7,12 @@ import os
 
 import aiohttp
 
+from logging_config import get_logger
+
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
+
+log = get_logger(__name__)
 
 
 async def fetch_news_headlines(symbol: str, limit: int = 10) -> list[dict]:
@@ -30,6 +34,12 @@ async def fetch_news_headlines(symbol: str, limit: int = 10) -> list[dict]:
         async with aiohttp.ClientSession() as session:
             async with session.get(NEWSAPI_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 if resp.status != 200:
+                    log.warning(
+                        "news.headlines_http_error",
+                        symbol=symbol,
+                        source="news",
+                        status=resp.status,
+                    )
                     return []
                 data = await resp.json()
                 articles = data.get("articles", [])
@@ -44,7 +54,14 @@ async def fetch_news_headlines(symbol: str, limit: int = 10) -> list[dict]:
                     for a in articles
                     if a.get("title")
                 ]
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "news.headlines_failed",
+            symbol=symbol,
+            source="news",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return []
 
 

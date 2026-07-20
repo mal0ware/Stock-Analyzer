@@ -9,10 +9,14 @@ from datetime import datetime, timezone
 
 import aiohttp
 
+from logging_config import get_logger
+
 from .base import MarketDataPoint
 
 ALPHAVANTAGE_KEY = os.getenv("ALPHAVANTAGE_KEY")
 BASE_URL = "https://www.alphavantage.co/query"
+
+log = get_logger(__name__)
 
 
 async def fetch_intraday(symbol: str, interval: str = "5min") -> list[MarketDataPoint]:
@@ -35,6 +39,12 @@ async def fetch_intraday(symbol: str, interval: str = "5min") -> list[MarketData
         async with aiohttp.ClientSession() as session:
             async with session.get(BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:
+                    log.warning(
+                        "alphavantage.intraday_http_error",
+                        symbol=symbol.upper(),
+                        source="alphavantage",
+                        status=resp.status,
+                    )
                     return []
                 data = await resp.json()
 
@@ -55,11 +65,27 @@ async def fetch_intraday(symbol: str, interval: str = "5min") -> list[MarketData
                     volume=int(values["5. volume"]),
                     source="alphavantage",
                 ))
-            except (KeyError, ValueError):
+            except (KeyError, ValueError) as exc:
+                # One malformed row shouldn't sink the whole series, but it is
+                # a data-quality signal worth surfacing at debug level.
+                log.debug(
+                    "alphavantage.intraday_row_skipped",
+                    symbol=symbol.upper(),
+                    source="alphavantage",
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
                 continue
 
         return results
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "alphavantage.intraday_failed",
+            symbol=symbol.upper(),
+            source="alphavantage",
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return []
 
 
@@ -84,10 +110,25 @@ async def fetch_technicals(symbol: str, indicator: str = "RSI", period: int = 14
         async with aiohttp.ClientSession() as session:
             async with session.get(BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 if resp.status != 200:
+                    log.warning(
+                        "alphavantage.technicals_http_error",
+                        symbol=symbol.upper(),
+                        source="alphavantage",
+                        indicator=indicator,
+                        status=resp.status,
+                    )
                     return {}
                 data: dict = await resp.json()
                 return data
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "alphavantage.technicals_failed",
+            symbol=symbol.upper(),
+            source="alphavantage",
+            indicator=indicator,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
         return {}
 
 
