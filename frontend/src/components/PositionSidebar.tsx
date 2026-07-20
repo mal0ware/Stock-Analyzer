@@ -27,8 +27,11 @@ export default function PositionSidebar() {
     return sum + pnl;
   }, 0);
 
+  // A long position is an asset worth price × qty; a short position is a
+  // liability (shares owed) worth −price × qty. Cash already holds the
+  // short-sale proceeds, so equity = cash + Σ(signed position value).
   const positionValue = openPositions.reduce(
-    (sum, pos) => sum + currentPrice * pos.quantity,
+    (sum, pos) => sum + (pos.side === 'long' ? 1 : -1) * currentPrice * pos.quantity,
     0,
   );
 

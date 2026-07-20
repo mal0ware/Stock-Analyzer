@@ -330,10 +330,17 @@ export const useSimulatorStore = create<SimulatorState>()((set, get) => ({
       pnlPct,
     };
 
+    // Long exit: sell the shares, cash increases by proceeds.
+    // Short exit: buy the shares back, cash decreases by the buyback cost
+    // (the short-sale proceeds were credited at entry).
+    const cashDelta = pos.side === 'long'
+      ? exitPrice * pos.quantity
+      : -exitPrice * pos.quantity;
+
     set({
       openPositions: openPositions.filter((p) => p.id !== positionId),
       closedPositions: [...closedPositions, closed],
-      cashBalance: cashBalance + exitPrice * pos.quantity,
+      cashBalance: cashBalance + cashDelta,
     });
   },
 
@@ -431,7 +438,10 @@ export const useSimulatorStore = create<SimulatorState>()((set, get) => ({
           : (pos.entryPrice - exitPrice) * pos.quantity;
         const pnlPct = (pnl / (pos.entryPrice * pos.quantity)) * 100;
         newlyClosed.push({ ...pos, exitPrice, exitDate: candle.time, pnl, pnlPct });
-        newCash += exitPrice * pos.quantity;
+        // Long exit credits sale proceeds; short exit debits the buyback cost.
+        newCash += pos.side === 'long'
+          ? exitPrice * pos.quantity
+          : -exitPrice * pos.quantity;
         positionsChanged = true;
       } else {
         stillOpen.push(pos);
