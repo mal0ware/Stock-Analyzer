@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-07-20T01:13:08.629280+00:00",
+  "accuracy": 1.0,
+  "report": {
+    "strong_downtrend": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1607
+    },
+    "downtrend": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2233
+    },
+    "sideways": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2493
+    },
+    "uptrend": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2456
+    },
+    "strong_uptrend": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2261
+    }
+  },
+  "confusion_matrix": [
+    [
+      1607,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      2233,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2493,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2456,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2261
+    ]
+  ],
+  "feature_importances_gain": {
+    "rsi_14": 0.12,
+    "macd_hist": 0.1214,
+    "bb_width": 0.1337,
+    "vol_zscore": 0.1104,
+    "ma_cross_10_50": 0.1343,
+    "price_change_1d": 0.1171,
+    "price_change_5d": 0.1057,
+    "volatility_20d": 0.1575
+  },
+  "feature_importances_permutation": {
+    "rsi_14": 0.068,
+    "macd_hist": 0.0973,
+    "bb_width": 0.1219,
+    "vol_zscore": 0.0367,
+    "ma_cross_10_50": 0.1028,
+    "price_change_1d": 0.0285,
+    "price_change_5d": 0.0374,
+    "volatility_20d": 0.1834
+  },
+  "best_hyperparameters": {
+    "n_estimators": 300,
+    "max_depth": 8,
+    "learning_rate": 0.2
+  },
+  "samples": 11050,
+  "class_distribution": {
+    "strong_downtrend": 1607,
+    "downtrend": 2233,
+    "sideways": 2493,
+    "uptrend": 2456,
+    "strong_uptrend": 2261
+  },
+  "custom_accuracy": 1.0,
+  "sklearn_accuracy": 0.3928,
+  "train_loss_final": 0.029712,
+  "cv_results_summary": {
+    "n_combinations": 27,
+    "best_mean_cv_accuracy": 0.3794
+  }
+}

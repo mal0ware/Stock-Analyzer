@@ -20,6 +20,29 @@ At inference time `ml.trend.TrendClassifier` lazily unpickles
 rule-based heuristic in `TrendClassifier._rule_based_fallback`. The API layer
 loads feature importances directly out of `metrics.json`.
 
+## The committed release model
+
+Both artifacts are **committed to the repository** (the `.gitignore` carves
+out `trend_classifier.pkl` and `metrics.json` from the otherwise-ignored
+`ml/models/`). This is deliberate:
+
+- **Releases are reproducible.** The desktop build workflow packages the
+  checked-in model instead of training against live market data at build
+  time (which would produce a different model on every run and on every
+  platform in the build matrix).
+- **Releases are guarded.** `.github/workflows/build-desktop.yml` fails if
+  the artifacts are missing and runs `scripts/verify_model.py` with the
+  bundled Python env to prove the shipped interpreter can load the model
+  and produce `"method": "ml_model"` predictions.
+- **CI keeps the pickle loadable.** The main CI workflow runs the same
+  verification on every push, so refactors that would break unpickling are
+  caught immediately.
+
+To update the shipped model: retrain (commands below), sanity-check
+`ml/models/metrics.json`, run `python scripts/verify_model.py`, refresh the
+"Training Results" numbers in the README from the new `metrics.json`, and
+commit both artifacts together in one commit.
+
 ## Prerequisites
 
 From the repository root:
@@ -39,7 +62,8 @@ fields are simply omitted; training still succeeds.
 > Network note: the default training run calls `yfinance` to download 2 years of
 > daily OHLCV for each ticker. It needs outbound internet access and is subject
 > to Yahoo Finance rate limits. There is no offline default dataset committed to
-> the repo — the synthetic-data tests (below) are what run in CI.
+> the repo — the synthetic-data tests (below) are what run in CI. This is also
+> why release builds do **not** retrain: they package the committed model.
 
 ## Commands
 

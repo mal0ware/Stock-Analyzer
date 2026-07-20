@@ -40,6 +40,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Releases must never silently ship the rule-based fallback: the
+      # trained model is committed to the repo (see ml/TRAINING.md) and its
+      # presence is asserted before anything is packaged.
+      - name: Verify trained model artifacts are committed
+        shell: bash
+        run: |
+          test -f ml/models/trend_classifier.pkl || { echo "::error::ml/models/trend_classifier.pkl is missing — releases must include the trained model (train and commit it per ml/TRAINING.md)"; exit 1; }
+          test -f ml/models/metrics.json || { echo "::error::ml/models/metrics.json is missing — commit it alongside the model"; exit 1; }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -83,6 +92,17 @@ jobs:
         run: |
           src/electron/bundled/python-env/python.exe -m pip install --upgrade pip
           src/electron/bundled/python-env/python.exe -m pip install -r api/requirements.txt
+
+      # Smoke-test with the exact interpreter that ships: unpickle the
+      # committed model and require method == "ml_model" on a prediction.
+      - name: Verify bundled model loads and predicts (Unix)
+        if: runner.os != 'Windows'
+        run: src/electron/bundled/python-env/bin/python3 scripts/verify_model.py
+
+      - name: Verify bundled model loads and predicts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: src/electron/bundled/python-env/python.exe scripts/verify_model.py
 
       - name: Install Electron dependencies
         working-directory: src/electron

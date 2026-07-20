@@ -64,8 +64,12 @@ venv/
 # SQLite databases
 *.db
 
-# Trained ML models (binary artifacts)
-ml/models/
+# Trained ML model artifacts: the release model IS committed (versioned
+# alongside the code so installers ship with the real classifier — see
+# ml/TRAINING.md). Anything else that lands in ml/models/ stays untracked.
+ml/models/*
+!ml/models/trend_classifier.pkl
+!ml/models/metrics.json
 
 # Benchmark results (runtime artifacts)
 benchmarks/results*.json

@@ -41,6 +41,11 @@ jobs:
       - name: Run pytest
         run: pytest tests/ -v
 
+      # The trained model is committed (see ml/TRAINING.md); make sure code
+      # changes never break unpickling or the ml_model prediction path.
+      - name: Verify committed ML model artifact
+        run: python scripts/verify_model.py
+
       # Frontend
       - name: Install frontend dependencies
         working-directory: frontend
@@ -49,6 +54,10 @@ jobs:
       - name: Type check frontend
         working-directory: frontend
         run: npx tsc --noEmit
+
+      - name: Run frontend tests (Vitest)
+        working-directory: frontend
+        run: npm test
 
       - name: Build frontend
         working-directory: frontend

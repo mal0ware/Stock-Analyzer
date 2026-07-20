@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/API%20Key-Not%20Required-brightgreen?style=flat-square" alt="No API Key">
 </p>
 
-> **Maintenance status:** v1.0.0 shipped 2026-04-21. The project is maintained on-demand, not actively developed. Last verified 2026-07-14: full test suite passing (45 passed, 1 skipped) and the live Yahoo Finance data path (quote, history, search, ML snapshot) working with `yfinance` 1.4.1.
+> **Maintenance status:** v1.0.0 shipped 2026-04-21. The project is maintained on-demand, not actively developed. Last verified 2026-07-19: backend suite passing (46 passed — the metrics-validation test now runs because the trained model is committed), frontend suite passing (27 Vitest tests), and the live Yahoo Finance data path (snapshot, history, history-range, market overview) working with `yfinance` 1.4.1.
 
 ---
 
@@ -115,14 +115,17 @@ The classifier uses second-order (Newton) optimization with softmax cross-entrop
 
 ### Training Results
 
-Trained on 11,050 samples from 25 large-cap stocks (2-year daily data). Note: the accuracy below is **in-sample training accuracy** (the model is scored on the data it was fit on), not an out-of-sample estimate of predictive power — see `docs/REVAMP_PLAN.md` for the planned walk-forward evaluation that would replace it.
+The committed model (`ml/models/trend_classifier.pkl`, retrained 2026-07-19) comes from the full documented pipeline: 11,050 samples from 25 large-cap stocks (2-year daily data), stratified 5-fold CV over the 27-combination grid, best combination (`n_estimators=300, max_depth=8, learning_rate=0.2`) retrained on the full dataset. All numbers below are from `ml/models/metrics.json`.
 
-| Metric | Score |
-|--------|-------|
-| **Accuracy** | 79.7% |
-| **Classes** | strong_downtrend, downtrend, sideways, uptrend, strong_uptrend |
-| **Top features** | Volume z-score, 20-day volatility, Bollinger width |
-| **vs. sklearn** | Within 0.7% accuracy on synthetic benchmarks (see below) |
+| Metric | Score | What it means |
+|--------|-------|---------------|
+| **Cross-validated accuracy** | **37.9%** | Best mean out-of-fold accuracy over 5 folds — the honest estimate of predictive power. Random guessing is 20% (majority class 22.6%), so the signal is real but modest: 10-day trend direction is mostly noise. |
+| **sklearn hold-out accuracy** | 39.3% | `HistGradientBoosting` on the same data/split — the from-scratch implementation tracks the reference library. |
+| **In-sample training accuracy** | 100.0% | At 300 trees × depth 8 the ensemble memorizes its training set. Quoted for transparency only; it says nothing about predictive power. |
+| **Classes** | 5 | strong_downtrend, downtrend, sideways, uptrend, strong_uptrend |
+| **Top features (permutation)** | — | 20-day volatility, Bollinger width, 10/50 MA crossover |
+
+The planned walk-forward evaluation (train strictly on the past, score strictly on the future — see `docs/REVAMP_PLAN.md`) remains the methodology that would replace these numbers for any real predictive claim.
 
 ### Other Models
 
@@ -136,15 +139,15 @@ All models run locally on your machine.
 
 ### Where the Trained Model Lives (and What Ships)
 
-The trained artifact `ml/models/trend_classifier.pkl` (plus `metrics.json`) is written by `python -m ml.train_cli` and is **gitignored — it is not committed to this repository**, and no step downloads or trains it during a build.
+The trained artifact `ml/models/trend_classifier.pkl` (plus `metrics.json`) is written by `python -m ml.train_cli` and **is committed to this repository** as a versioned artifact (~21 MB pickle, no Git LFS needed). That makes every build reproducible: releases package the exact model that was validated in CI, with no network training at build time.
 
-Consequences, honestly stated:
+How each build target picks it up:
 
-- **Release installers do not contain the trained model.** The `Build Desktop Apps` workflow (`.github/workflows/build-desktop.yml`) packages a clean checkout, so `ml/models/` does not exist at build time. In the shipped v1.0.0 app the trend signal comes from the rule-based heuristic (`TrendClassifier._rule_based_fallback`); snapshot responses report `"method": "rule_based"` instead of `"method": "ml_model"`.
-- **A locally built installer *can* include it.** electron-builder copies the whole `ml/` tree into the app bundle (`extraResources` → `backend/api/ml` in `src/electron/package.json`), so if you run `python -m ml.train_cli` before `npm run dist`, the `.pkl` and `metrics.json` ship inside your build and the classifier loads them at startup.
-- The same applies to a dev checkout and the Docker image: train first (see `ml/TRAINING.md`), or you get the rule-based fallback.
+- **Release installers include the trained model.** electron-builder copies the whole `ml/` tree into the app bundle (`extraResources` → `backend/api/ml` in `src/electron/package.json`). The `Build Desktop Apps` workflow (`.github/workflows/build-desktop.yml`) fails fast if the artifact is missing, and smoke-tests it with the *bundled* Python interpreter (`scripts/verify_model.py`) before packaging — a release can no longer silently ship the rule-based heuristic. Snapshot responses from a shipped app report `"method": "ml_model"`.
+- **Dev checkouts and the Docker image** get the committed model automatically (`COPY ml/ ./ml/` in the Dockerfile). Retrain any time with `python -m ml.train_cli` (see `ml/TRAINING.md`); the retrained artifact simply replaces the committed one.
+- **CI guards the artifact.** Every push runs `scripts/verify_model.py`, so a refactor that breaks unpickling (e.g. renaming `GradientBoostingClassifier`) fails CI instead of degrading shipped apps to the fallback.
 
-The app degrades gracefully either way — the fallback is deliberate — but "from-scratch gradient-boosted model" applies to shipped binaries only if you train before packaging.
+The rule-based heuristic (`TrendClassifier._rule_based_fallback`) still exists as a graceful-degradation path — responses are labelled `"method": "rule_based"` whenever it is used — but no supported build ships without the trained model. (Historical note: v1.0.0 installers predate this and do fall back to the heuristic.)
 
 ---
 
